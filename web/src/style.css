@@ -1,0 +1,330 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #ffffff; /* White Base (Shadcn Light) */
+  color: #09090b; /* Zinc 950 */
+}
+
+/* Custom scrollbars - Shadcn minimalist light */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #e4e4e7; /* Zinc 200 */
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d4d4d8; /* Zinc 300 */
+}
+
+/* Shadcn-like CSS Overrides for Ant Design Vue in Light Mode */
+.ant-layout {
+  background: #ffffff !important;
+}
+.ant-layout-header {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e4e4e7 !important; /* Zinc 200 */
+}
+.ant-layout-sider {
+  background: #ffffff !important;
+  border-right: 1px solid #e4e4e7 !important;
+}
+
+/* Menu Customization (Light mode) */
+.ant-menu {
+  background: transparent !important;
+  border-right: none !important;
+}
+.ant-menu-item {
+  color: #71717a !important; /* Zinc 500 */
+  margin: 4px 8px !important;
+  border-radius: 6px !important;
+  width: calc(100% - 16px) !important;
+}
+.ant-menu-item-selected {
+  background-color: #f4f4f5 !important; /* Zinc 100 */
+  color: #09090b !important; /* Zinc 950 */
+  font-weight: 500 !important;
+}
+.ant-menu-item-selected .ant-menu-item-icon {
+  color: #09090b !important;
+}
+.ant-menu-submenu-title {
+  color: #71717a !important; /* Zinc 500 */
+  margin: 4px 8px !important;
+  border-radius: 6px !important;
+  width: calc(100% - 16px) !important;
+}
+.ant-menu-submenu-title:hover {
+  color: #09090b !important;
+  background-color: #f4f4f5 !important;
+}
+.ant-menu-submenu-selected .ant-menu-submenu-title {
+  color: #09090b !important;
+}
+
+/* Collapsed menu styling (Perfect centering & hover states) */
+.ant-menu-inline-collapsed .ant-menu-item,
+.ant-menu-inline-collapsed .ant-menu-submenu-title,
+.ant-layout-sider-collapsed .ant-menu-item,
+.ant-layout-sider-collapsed .ant-menu-submenu-title {
+  margin: 4px 0 !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+.ant-menu-inline-collapsed .ant-menu-item .ant-menu-item-icon,
+.ant-menu-inline-collapsed .ant-menu-submenu-title .ant-menu-item-icon,
+.ant-layout-sider-collapsed .ant-menu-item .ant-menu-item-icon,
+.ant-layout-sider-collapsed .ant-menu-submenu-title .ant-menu-item-icon {
+  margin: 0 !important;
+  font-size: 1.1rem !important;
+}
+
+/* Sider Trigger (Monochrome Zinc style) */
+.ant-layout-sider-trigger {
+  background: #ffffff !important;
+  border-top: 1px solid #e4e4e7 !important;
+  border-right: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+}
+.ant-layout-sider-trigger:hover {
+  background: #f4f4f5 !important;
+}
+
+/* Cards (Clean Zinc Border and White Background) */
+.ant-card {
+  background: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+}
+.ant-card-head {
+  border-bottom: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+}
+
+/* Inputs, Textareas, Selects */
+.ant-input, .ant-input-password, .ant-input-affix-wrapper, .ant-textarea {
+  background-color: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+  border-radius: 6px !important;
+}
+.ant-input:focus, .ant-input-affix-wrapper-focused, .ant-textarea:focus {
+  border-color: #a1a1aa !important; /* Zinc 400 */
+  box-shadow: 0 0 0 1px #a1a1aa !important;
+}
+.ant-select-selector {
+  background-color: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+  border-radius: 6px !important;
+}
+.ant-select-focused .ant-select-selector {
+  border-color: #a1a1aa !important;
+  box-shadow: 0 0 0 1px #a1a1aa !important;
+}
+/* Select dropdown style override */
+.ant-select-dropdown {
+  background-color: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05) !important;
+}
+.ant-select-item-option-selected {
+  background-color: #f4f4f5 !important;
+  color: #09090b !important;
+}
+.ant-select-item-option-active {
+  background-color: #fafafa !important;
+}
+
+/* Buttons - Shadcn Light Styles */
+.ant-btn {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  transition: all 0.15s ease;
+}
+.ant-btn-primary {
+  background-color: #09090b !important; /* Black primary */
+  border-color: #09090b !important;
+  color: #ffffff !important;
+}
+.ant-btn-primary:hover {
+  background-color: #27272a !important; /* Dark gray primary hover */
+  border-color: #27272a !important;
+}
+.ant-btn-default {
+  background-color: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+}
+.ant-btn-default:hover {
+  background-color: #f4f4f5 !important;
+  border-color: #d4d4d8 !important;
+  color: #09090b !important;
+}
+.ant-btn-background-ghost {
+  background-color: transparent !important;
+  border: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+}
+.ant-btn-background-ghost:hover {
+  background-color: #f4f4f5 !important;
+}
+.ant-btn-dangerous.ant-btn-primary {
+  background-color: #ef4444 !important; /* Red 500 */
+  border-color: #ef4444 !important;
+  color: #ffffff !important;
+}
+.ant-btn-dangerous.ant-btn-primary:hover {
+  background-color: #dc2626 !important;
+}
+
+/* Tables - Shadcn minimalist light style */
+.ant-table {
+  background: #ffffff !important;
+  color: #09090b !important;
+}
+.ant-table-thead > tr > th {
+  background: #fafafa !important; /* Zinc 50 */
+  color: #71717a !important; /* Zinc 500 */
+  border-bottom: 1px solid #e4e4e7 !important;
+  font-weight: 500 !important;
+}
+.ant-table-tbody > tr > td {
+  border-bottom: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+}
+.ant-table-row:hover > td {
+  background: #fafafa !important; /* Hover state light */
+}
+
+/* Modals & Drawers - Shadcn light style */
+.ant-modal-content {
+  background-color: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05) !important;
+}
+.ant-modal-header {
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e4e4e7 !important;
+  color: #09090b !important;
+}
+.ant-modal-title {
+  color: #09090b !important;
+  font-weight: 600 !important;
+}
+.ant-modal-footer {
+  border-top: 1px solid #e4e4e7 !important;
+}
+.ant-drawer-content-wrapper {
+  box-shadow: -10px 0 15px -3px rgba(0, 0, 0, 0.05) !important;
+}
+.ant-drawer-content {
+  background-color: #ffffff !important;
+  color: #09090b !important;
+}
+.ant-drawer-header {
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e4e4e7 !important;
+}
+.ant-drawer-title {
+  color: #09090b !important;
+  font-weight: 600 !important;
+}
+
+/* Tabs */
+.ant-tabs-nav {
+  border-bottom: 1px solid #e4e4e7 !important;
+}
+.ant-tabs-tab {
+  color: #71717a !important;
+}
+.ant-tabs-tab-active {
+  color: #09090b !important;
+}
+.ant-tabs-ink-bar {
+  background: #09090b !important;
+}
+
+/* Checkboxes */
+.ant-checkbox-inner {
+  background-color: #ffffff !important;
+  border: 1px solid #e4e4e7 !important;
+}
+.ant-checkbox-checked .ant-checkbox-inner {
+  background-color: #09090b !important;
+  border-color: #09090b !important;
+}
+.ant-checkbox-checked .ant-checkbox-inner::after {
+  border-color: #ffffff !important;
+}
+
+/* Switches */
+.ant-switch {
+  background-color: #e4e4e7 !important;
+}
+.ant-switch-checked {
+  background-color: #09090b !important;
+}
+.ant-switch-checked .ant-switch-handle::before {
+  background-color: #ffffff !important;
+}
+
+/* Tags */
+.ant-tag {
+  border-radius: 4px !important;
+  border: 1px solid #e4e4e7 !important;
+  background: #fafafa !important;
+  color: #27272a !important;
+}
+
+/* Descriptions */
+.ant-descriptions-bordered .ant-descriptions-view {
+  border: 1px solid #e4e4e7 !important;
+  border-radius: 6px !important;
+}
+.ant-descriptions-row {
+  border-bottom: 1px solid #e4e4e7 !important;
+}
+.ant-descriptions-item-label {
+  background-color: #fafafa !important;
+  color: #71717a !important;
+  border-right: 1px solid #e4e4e7 !important;
+}
+.ant-descriptions-item-content {
+  color: #09090b !important;
+  border-right: 1px solid #e4e4e7 !important;
+}
+
+/* Glass panel utility override for shadcn light */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e4e4e7;
+}
+.premium-gradient {
+  background: #09090b !important;
+  color: #ffffff !important;
+}
+.gradient-text {
+  background: #09090b;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

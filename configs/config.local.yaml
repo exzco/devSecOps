@@ -1,0 +1,57 @@
+server:
+  port: 22211
+  mode: debug  # debug / release
+
+database:
+  host: localhost
+  port: 5432
+  user: codeql
+  password: codeql123
+  dbname: codeql_platform
+  sslmode: disable
+
+redis:
+  addr: localhost:6379
+  password: 
+  db: 10
+
+scanner:
+  codeql_path: "D:/web/codeql-cli/codeql.exe" # CodeQL CLI 路径
+  codeql_queries: "D:/web/codeql-codeql-cli-v2.25.6" # CodeQL 查询库路径
+  work_dir: "./result" # 扫描工作目录
+  max_concurrent: 2 # 最大并发扫描数
+  timeout_minutes: 30 # 单次扫描最长时间    
+  default_profile: baseline
+  rule_profiles:
+    baseline:
+      description: "官方安全扩展规则"
+      include_default: true
+      targets: []
+  supported_languages:
+    - go
+    - java
+    - javascript
+    - python
+
+dast:
+  redis_dial_timeout: 5
+  redis_read_timeout: 60
+  poc_dir: "./poc"
+  default_ports: "top1000"
+  queue_prefix: "scan"
+  portscan_rate: 1000
+  portscan_timeout: 5
+  portscan_threads: 25
+  portscan_type: "connect"
+  console_log: true
+
+minio:
+  endpoint: localhost:9000
+  access_key: minioadmin
+  secret_key: minioadmin123
+  bucket: codeql-results
+  use_ssl: false
+
+jwt:
+  secret: "secret_key_wsh_loaeriver" # 密钥
+  expire_hours: 72

@@ -1,0 +1,4 @@
+/result/
+.env
+*.exe
+/web/node_modules/
