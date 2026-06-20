@@ -1,11 +1,660 @@
 PS C:\Users\10278\Desktop\demo\devsecops> go run read_db.go
-ID: 1, RuleID: go/path-injection, FilePath: backend/handler/admin_controller_challenge.go, SnippetLen: 147, DataFlow: [[{"message": "&... [postupdate]", "snippet": "", "end_line": 86, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 86}, {"message": "selection of GameId", "snippet": "", "end_line": 124, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 124}, {"message": "definition of gameID", "snippet": "", "end_line": 45, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 45}, {"message": "gameID", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "call to Join", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "dir", "snippet": "", "end_line": 58, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 58}], [{"message": "&... [postupdate]", "snippet": "", "end_line": 242, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 242}, {"message": "selection of GameId", "snippet": "", "end_line": 303, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 303}, {"message": "definition of gameID", "snippet": "", "end_line": 45, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 45}, {"message": "gameID", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "call to Join", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "dir", "snippet": "", "end_line": 58, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 58}]]
-ID: 2, RuleID: go/path-injection, FilePath: backend/handler/admin_controller_challenge.go, SnippetLen: 129, DataFlow: [[{"message": "&... [postupdate]", "snippet": "", "end_line": 86, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 86}, {"message": "selection of GameId", "snippet": "", "end_line": 124, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 124}, {"message": "definition of gameID", "snippet": "", "end_line": 45, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 45}, {"message": "gameID", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "call to Join", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "dir", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "call to Join", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "fullPath", "snippet": "", "end_line": 63, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 63}], [{"message": "&... [postupdate]", "snippet": "", "end_line": 86, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 86}, {"message": "selection of AttachmentName", "snippet": "", "end_line": 124, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 124}, {"message": "definition of attachmentName", "snippet": "", "end_line": 45, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 45}, {"message": "attachmentName", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "call to Base", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "call to TrimSpace", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "name", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "call to Join", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "fullPath", "snippet": "", "end_line": 63, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 63}], [{"message": "&... [postupdate]", "snippet": "", "end_line": 242, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 242}, {"message": "selection of GameId", "snippet": "", "end_line": 303, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 303}, {"message": "definition of gameID", "snippet": "", "end_line": 45, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 45}, {"message": "gameID", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "call to Join", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "dir", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "call to Join", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "fullPath", "snippet": "", "end_line": 63, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 63}], [{"message": "&... [postupdate]", "snippet": "", "end_line": 242, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 242}, {"message": "selection of AttachmentName", "snippet": "", "end_line": 303, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 303}, {"message": "definition of attachmentName", "snippet": "", "end_line": 45, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 45}, {"message": "attachmentName", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "call to Base", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "call to TrimSpace", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "name", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "call to Join", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "fullPath", "snippet": "", "end_line": 63, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 63}]]
-ID: 3, RuleID: go/path-injection, FilePath: backend/handler/admin_controller_challenge.go, SnippetLen: 41, DataFlow: [[{"message": "&... [postupdate]", "snippet": "", "end_line": 86, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 86}, {"message": "selection of GameId", "snippet": "", "end_line": 124, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 124}, {"message": "definition of gameID", "snippet": "", "end_line": 45, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 45}, {"message": "gameID", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "call to Join", "snippet": "", "end_line": 57, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 57}, {"message": "dir", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "call to Join", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "fullPath", "snippet": "", "end_line": 67, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 67}, {"message": "... := ...[1]", "snippet": "", "end_line": 124, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 124}, {"message": "attachmentPath", "snippet": "", "end_line": 130, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 130}, {"message": "challenge [postupdate] [AttachmentPath]", "snippet": "", "end_line": 130, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 130}, {"message": "challenge [AttachmentPath]", "snippet": "", "end_line": 133, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 133}, {"message": "selection of AttachmentPath", "snippet": "", "end_line": 133, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 133}, {"message": "definition of path", "snippet": "", "end_line": 70, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 70}, {"message": "path", "snippet": "", "end_line": 74, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 74}], [{"message": "&... [postupdate]", "snippet": "", "end_line": 86, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 86}, {"message": "selection of AttachmentName", "snippet": "", "end_line": 124, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 124}, {"message": "definition of attachmentName", "snippet": "", "end_line": 45, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 45}, {"message": "attachmentName", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "call to Base", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "call to TrimSpace", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 46}, {"message": "name", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "call to Join", "snippet": "", "end_line": 62, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 62}, {"message": "fullPath", "snippet": "", "end_line": 67, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 67}, {"message": "... := ...[1]", "snippet": "", "end_line": 124, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 124}, {"message": "attachmentPath", "snippet": "", "end_line": 130, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 130}, {"message": "challenge [postupdate] [AttachmentPath]", "snippet": "", "end_line": 130, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 130}, {"message": "challenge [AttachmentPath]", "snippet": "", "end_line": 133, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 133}, {"message": "selection of AttachmentPath", "snippet": "", "end_line": 133, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 133}, {"message": "definition of path", "snippet": "", "end_line": 70, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 70}, {"message": "path", "snippet": "", "end_line": 74, "file_path": "backend/handler/admin_controller_challenge.go", "start_line": 74}]]
-ID: 4, RuleID: go/log-injection, FilePath: backend/handler/admin_controller_game.go, SnippetLen: 285, DataFlow: [[{"message": "&... [postupdate]", "snippet": "", "end_line": 22, "file_path": "backend/handler/admin_controller_game.go", "start_line": 22}, {"message": "selection of Title", "snippet": "", "end_line": 41, "file_path": "backend/handler/admin_controller_game.go", "start_line": 41}, {"message": "struct literal [Title]", "snippet": "", "end_line": 46, "file_path": "backend/handler/admin_controller_game.go", "start_line": 39}, {"message": "game [Title]", "snippet": "", "end_line": 51, "file_path": "backend/handler/admin_controller_game.go", "start_line": 51}, {"message": "selection of Title", "snippet": "", "end_line": 51, "file_path": "backend/handler/admin_controller_game.go", "start_line": 51}]]
-ID: 6, RuleID: go/log-injection, FilePath: backend/handler/user_team.go, SnippetLen: 255, DataFlow: [[{"message": "&... [postupdate]", "snippet": "", "end_line": 22, "file_path": "backend/handler/user_team.go", "start_line": 22}, {"message": "selection of TeamName", "snippet": "", "end_line": 68, "file_path": "backend/handler/user_team.go", "start_line": 68}, {"message": "struct literal [TeamName]", "snippet": "", "end_line": 75, "file_path": "backend/handler/user_team.go", "start_line": 67}, {"message": "team [TeamName]", "snippet": "", "end_line": 99, "file_path": "backend/handler/user_team.go", "start_line": 99}, {"message": "selection of TeamName", "snippet": "", "end_line": 99, "file_path": "backend/handler/user_team.go", "start_line": 99}]]
-ID: 5, RuleID: go/log-injection, FilePath: backend/middleware/middleware.go, SnippetLen: 285, DataFlow: null   {"time":"2026-06-18T20:09:22+08:00","message":"[dast-queue] Redis connected: localhost:6379 (db=10)"}
-{"time":"2026-06-18T20:09:22+08:00","message":"[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started."}
-{"time":"2026-06-18T20:09:22+08:00","message":"[port-worker] started, waiting for jobs on scan:port:jobs ..."}
-{"time":"2026-06-18T20:09:22+08:00","message":"[fp-worker] started, waiting for jobs on scan:fp:jobs ..."}
-{"time":"2026-06-18T20:09:22+08:00","message":"[poc-worker] started, waiting for jobs on scan:poc:jobs ..."}
+ID: 1, RuleID: go/path-injection, FilePath: backend/handler/admin_controller_challenge.go, SnippetLen: 147, DataFlow: [
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 86,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 86
+        },
+        {
+            "message": "selection of GameId",
+            "snippet": "",
+            "end_line": 124,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 124
+        },
+        {
+            "message": "definition of gameID",
+            "snippet": "",
+            "end_line": 45,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 45
+        },
+        {
+            "message": "gameID",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "dir",
+            "snippet": "",
+            "end_line": 58,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 58
+        }
+    ],
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 242,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 242
+        },
+        {
+            "message": "selection of GameId",
+            "snippet": "",
+            "end_line": 303,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 303
+        },
+        {
+            "message": "definition of gameID",
+            "snippet": "",
+            "end_line": 45,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 45
+        },
+        {
+            "message": "gameID",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "dir",
+            "snippet": "",
+            "end_line": 58,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 58
+        }
+    ]
+]
+ID: 2, RuleID: go/path-injection, FilePath: backend/handler/admin_controller_challenge.go, SnippetLen: 129, DataFlow: [
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 86,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 86
+        },
+        {
+            "message": "selection of GameId",
+            "snippet": "",
+            "end_line": 124,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 124
+        },
+        {
+            "message": "definition of gameID",
+            "snippet": "",
+            "end_line": 45,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 45
+        },
+        {
+            "message": "gameID",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "dir",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "fullPath",
+            "snippet": "",
+            "end_line": 63,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 63
+        }
+    ],
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 86,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 86
+        },
+        {
+            "message": "selection of AttachmentName",
+            "snippet": "",
+            "end_line": 124,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 124
+        },
+        {
+            "message": "definition of attachmentName",
+            "snippet": "",
+            "end_line": 45,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 45
+        },
+        {
+            "message": "attachmentName",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "call to Base",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "call to TrimSpace",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "name",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "fullPath",
+            "snippet": "",
+            "end_line": 63,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 63
+        }
+    ],
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 242,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 242
+        },
+        {
+            "message": "selection of GameId",
+            "snippet": "",
+            "end_line": 303,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 303
+        },
+        {
+            "message": "definition of gameID",
+            "snippet": "",
+            "end_line": 45,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 45
+        },
+        {
+            "message": "gameID",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "dir",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "fullPath",
+            "snippet": "",
+            "end_line": 63,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 63
+        }
+    ],
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 242,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 242
+        },
+        {
+            "message": "selection of AttachmentName",
+            "snippet": "",
+            "end_line": 303,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 303
+        },
+        {
+            "message": "definition of attachmentName",
+            "snippet": "",
+            "end_line": 45,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 45
+        },
+        {
+            "message": "attachmentName",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "call to Base",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "call to TrimSpace",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "name",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "fullPath",
+            "snippet": "",
+            "end_line": 63,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 63
+        }
+    ]
+]
+ID: 3, RuleID: go/path-injection, FilePath: backend/handler/admin_controller_challenge.go, SnippetLen: 41, DataFlow: [
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 86,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 86
+        },
+        {
+            "message": "selection of GameId",
+            "snippet": "",
+            "end_line": 124,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 124
+        },
+        {
+            "message": "definition of gameID",
+            "snippet": "",
+            "end_line": 45,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 45
+        },
+        {
+            "message": "gameID",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 57,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 57
+        },
+        {
+            "message": "dir",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "fullPath",
+            "snippet": "",
+            "end_line": 67,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 67
+        },
+        {
+            "message": "... := ...[1]",
+            "snippet": "",
+            "end_line": 124,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 124
+        },
+        {
+            "message": "attachmentPath",
+            "snippet": "",
+            "end_line": 130,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 130
+        },
+        {
+            "message": "challenge [postupdate] [AttachmentPath]",
+            "snippet": "",
+            "end_line": 130,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 130
+        },
+        {
+            "message": "challenge [AttachmentPath]",
+            "snippet": "",
+            "end_line": 133,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 133
+        },
+        {
+            "message": "selection of AttachmentPath",
+            "snippet": "",
+            "end_line": 133,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 133
+        },
+        {
+            "message": "definition of path",
+            "snippet": "",
+            "end_line": 70,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 70
+        },
+        {
+            "message": "path",
+            "snippet": "",
+            "end_line": 74,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 74
+        }
+    ],
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 86,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 86
+        },
+        {
+            "message": "selection of AttachmentName",
+            "snippet": "",
+            "end_line": 124,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 124
+        },
+        {
+            "message": "definition of attachmentName",
+            "snippet": "",
+            "end_line": 45,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 45
+        },
+        {
+            "message": "attachmentName",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "call to Base",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "call to TrimSpace",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 46
+        },
+        {
+            "message": "name",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "call to Join",
+            "snippet": "",
+            "end_line": 62,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 62
+        },
+        {
+            "message": "fullPath",
+            "snippet": "",
+            "end_line": 67,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 67
+        },
+        {
+            "message": "... := ...[1]",
+            "snippet": "",
+            "end_line": 124,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 124
+        },
+        {
+            "message": "attachmentPath",
+            "snippet": "",
+            "end_line": 130,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 130
+        },
+        {
+            "message": "challenge [postupdate] [AttachmentPath]",
+            "snippet": "",
+            "end_line": 130,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 130
+        },
+        {
+            "message": "challenge [AttachmentPath]",
+            "snippet": "",
+            "end_line": 133,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 133
+        },
+        {
+            "message": "selection of AttachmentPath",
+            "snippet": "",
+            "end_line": 133,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 133
+        },
+        {
+            "message": "definition of path",
+            "snippet": "",
+            "end_line": 70,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 70
+        },
+        {
+            "message": "path",
+            "snippet": "",
+            "end_line": 74,
+            "file_path": "backend/handler/admin_controller_challenge.go",
+            "start_line": 74
+        }
+    ]
+]
+ID: 4, RuleID: go/log-injection, FilePath: backend/handler/admin_controller_game.go, SnippetLen: 285, DataFlow: [
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 22,
+            "file_path": "backend/handler/admin_controller_game.go",
+            "start_line": 22
+        },
+        {
+            "message": "selection of Title",
+            "snippet": "",
+            "end_line": 41,
+            "file_path": "backend/handler/admin_controller_game.go",
+            "start_line": 41
+        },
+        {
+            "message": "struct literal [Title]",
+            "snippet": "",
+            "end_line": 46,
+            "file_path": "backend/handler/admin_controller_game.go",
+            "start_line": 39
+        },
+        {
+            "message": "game [Title]",
+            "snippet": "",
+            "end_line": 51,
+            "file_path": "backend/handler/admin_controller_game.go",
+            "start_line": 51
+        },
+        {
+            "message": "selection of Title",
+            "snippet": "",
+            "end_line": 51,
+            "file_path": "backend/handler/admin_controller_game.go",
+            "start_line": 51
+        }
+    ]
+]
+ID: 6, RuleID: go/log-injection, FilePath: backend/handler/user_team.go, SnippetLen: 255, DataFlow: [
+    [
+        {
+            "message": "&... [postupdate]",
+            "snippet": "",
+            "end_line": 22,
+            "file_path": "backend/handler/user_team.go",
+            "start_line": 22
+        },
+        {
+            "message": "selection of TeamName",
+            "snippet": "",
+            "end_line": 68,
+            "file_path": "backend/handler/user_team.go",
+            "start_line": 68
+        },
+        {
+            "message": "struct literal [TeamName]",
+            "snippet": "",
+            "end_line": 75,
+            "file_path": "backend/handler/user_team.go",
+            "start_line": 67
+        },
+        {
+            "message": "team [TeamName]",
+            "snippet": "",
+            "end_line": 99,
+            "file_path": "backend/handler/user_team.go",
+            "start_line": 99
+        },
+        {
+            "message": "selection of TeamName",
+            "snippet": "",
+            "end_line": 99,
+            "file_path": "backend/handler/user_team.go",
+            "start_line": 99
+        }
+    ]
+]
+ID: 5, RuleID: go/log-injection, FilePath: backend/middleware/middleware.go, SnippetLen: 285, DataFlow: null   {
+    "time": "2026-06-18T20:09:22+08:00",
+    "message": "[dast-queue] Redis connected: localhost:6379 (db=10)"
+}
+{
+    "time": "2026-06-18T20:09:22+08:00",
+    "message": "[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started."
+}
+{
+    "time": "2026-06-18T20:09:22+08:00",
+    "message": "[port-worker] started, waiting for jobs on scan:port:jobs ..."
+}
+{
+    "time": "2026-06-18T20:09:22+08:00",
+    "message": "[fp-worker] started, waiting for jobs on scan:fp:jobs ..."
+}
+{
+    "time": "2026-06-18T20:09:22+08:00",
+    "message": "[poc-worker] started, waiting for jobs on scan:poc:jobs ..."
+}
