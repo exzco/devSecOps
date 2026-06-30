@@ -14,10 +14,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"devsecops/internal/config"
-	dastHandler "devsecops/internal/dast/handler"
 	dastEngine "devsecops/internal/dast/engine"
+	dastHandler "devsecops/internal/dast/handler"
 	dastService "devsecops/internal/dast/service"
 	"devsecops/internal/model"
+	"devsecops/internal/preflight"
 	sastHandler "devsecops/internal/sast/handler"
 	sastScanner "devsecops/internal/sast/scanner"
 	sastScheduler "devsecops/internal/sast/scheduler"
@@ -36,13 +37,15 @@ func main() {
 	}
 	log.Printf("[Init] Config loaded: %s", configPath)
 
+	preflight.RunChecks(true, true)
+
 	db, err := model.InitDB(&cfg.Database)
 	if err != nil {
 		panic("failed to initialize database: " + err.Error())
 	}
 	log.Println("[Init] Database connected and migrated")
 
-	//实例化 SAST (静态安全测试) 服务与 Worker
+	//实例化 SAST 服务与 Worker
 	scanWorker := sastScanner.NewScanWorker(&cfg.Scanner)
 	sastRepoSvc := sastService.NewRepoService(db)
 	sastScanSvc := sastService.NewScanService(db, scanWorker)
@@ -56,12 +59,12 @@ func main() {
 
 	//  实例化 DAST 服务与后台 Worker 协程
 	dastSvc := dastService.NewDastService(&cfg.Redis, cfg.Dast.QueuePrefix)
-	pocSvc := dastService.NewPocService(db)
+	pocSvc := dastService.NewPocService(&cfg.MinIO)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dastEngine.StartAllDastWorkers(ctx, cfg)
+	dastEngine.StartAllDastWorkers(ctx, cfg, pocSvc)
 
 	//  构造路由 Handler 控制器
 	repoHandler := sastHandler.NewRepoHandler(sastRepoSvc)
@@ -95,21 +98,23 @@ func main() {
 		v1.GET("/scan/tasks/:id/sarif", scanHandler.ExportSARIF)
 		v1.GET("/scan/tasks/:id/sarif/summary", scanHandler.GetSARIFSummary)
 
-		// DAST 动态扫描路由
+		// DAST 路由
 		v1.POST("/dast/scan/tasks", dastCtrlHandler.CreateTask)
 		v1.GET("/dast/scan/tasks", dastCtrlHandler.ListTasks)
 		v1.GET("/dast/scan/tasks/:id/status", dastCtrlHandler.GetTaskStatus)
 		v1.GET("/dast/scan/tasks/:id/results", dastCtrlHandler.GetTaskResults)
+		v1.GET("/dast/scan/tasks/:id/assets", dastCtrlHandler.GetTaskAssets)
 		v1.POST("/dast/scan/tasks/delete/:id", dastCtrlHandler.DeleteTask)
+		v1.POST("/dast/scan/tasks/stop/:id", dastCtrlHandler.StopTask)
 
-		// DAST PoC 模板路由
+		// DAST PoC 路由
 		v1.POST("/dast/pocs", pocHandler.CreatePoc)
 		v1.GET("/dast/pocs", pocHandler.ListPocs)
 		v1.POST("/dast/pocs/update/:id", pocHandler.UpdatePoc)
 		v1.POST("/dast/pocs/delete/:id", pocHandler.DeletePoc)
 	}
 
-	// 静态前端资源挂载 (Vue 构建物存放于 web/dist)
+	// 静态前端资源挂载 
 	r.Static("/assets", "./web/dist/assets")
 	r.StaticFile("/favicon.svg", "./web/dist/favicon.svg")
 	r.StaticFile("/icons.svg", "./web/dist/icons.svg")
@@ -150,5 +155,5 @@ func main() {
 	cancel()
 	log.Println("[Asynq Worker] Shutting down worker...")
 	asynqServer.Shutdown()
-	log.Println("[System] Graceful shutdown complete.")
+	log.Println("[System] shutdown complete.")
 }

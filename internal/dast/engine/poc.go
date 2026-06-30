@@ -31,9 +31,6 @@ func ScanWithTags(ctx context.Context, target string, tags []string, pocDir stri
 	engine, err := nuclei.NewNucleiEngineCtx(ctx,
 		nuclei.WithCatalog(disk.NewCatalog(pocDir)),
 		nuclei.DisableUpdateCheck(),
-		nuclei.WithTemplateFilters(nuclei.TemplateFilters{
-			Tags: tags,
-		}),
 	)
 	if err != nil {
 		return nil, err

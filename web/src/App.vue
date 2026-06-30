@@ -14,7 +14,6 @@
 </template>
 
 <script setup lang="ts">
-// App.vue
 </script>
 
 <style>

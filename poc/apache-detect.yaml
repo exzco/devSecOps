@@ -1,0 +1,29 @@
+id: apache-detect
+
+info:
+  name: Apache Detection
+  author: philippedelteil
+  severity: info
+  description: Some Apache servers have the version on the response header. The OpenSSL version can be also obtained.
+  metadata:
+    max-request: 1
+  tags: tech,apache,discovery,web
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Apache[/ ][0-9]"
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+          - 403

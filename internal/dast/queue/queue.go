@@ -27,6 +27,7 @@ func (q QueueKeys) FpJobs() string                    { return q.Prefix + ":fp:j
 func (q QueueKeys) PocJobs() string                   { return q.Prefix + ":poc:jobs" }
 func (q QueueKeys) StatusKey(taskId string) string    { return q.Prefix + ":status:" + taskId }
 func (q QueueKeys) ResultsKey(taskId string) string   { return q.Prefix + ":results:" + taskId }
+func (q QueueKeys) AssetsKey(taskId string) string    { return q.Prefix + ":assets:" + taskId }
 
 type QueueClient struct {
 	Rdb *redis.Client

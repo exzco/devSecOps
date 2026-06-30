@@ -2,3 +2,5 @@
 .env
 *.exe
 /web/node_modules/
+devsecops
+/web/dist/

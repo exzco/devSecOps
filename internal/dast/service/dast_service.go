@@ -176,7 +176,46 @@ func (s *DastService) GetTaskResults(ctx context.Context, taskId string) ([]inte
 }
 
 func (s *DastService) DeleteTask(ctx context.Context, taskId string) error {
-	s.rdb.Del(ctx, s.keys.StatusKey(taskId), s.keys.ResultsKey(taskId))
+	// If task is running or stopping, send cancellation signal to abort ongoing background scanner jobs
+	statusMap, err := s.rdb.HGetAll(ctx, s.keys.StatusKey(taskId)).Result()
+	if err == nil && (statusMap["status"] == "running" || statusMap["status"] == "stopping") {
+		controlKey := s.keys.Prefix + ":control"
+		s.rdb.Publish(ctx, controlKey, taskId)
+	}
+
+	s.rdb.Del(ctx, s.keys.StatusKey(taskId), s.keys.ResultsKey(taskId), s.keys.AssetsKey(taskId))
 	s.rdb.SRem(ctx, s.keys.Prefix+":all_tasks", taskId)
 	return nil
 }
+
+func (s *DastService) StopTask(ctx context.Context, taskId string) error {
+	// 1. Mark task status as "stopping" (正在停止) immediately so the UI reflects it
+	if err := s.rdb.HSet(ctx, s.keys.StatusKey(taskId), "status", "stopping").Err(); err != nil {
+		return fmt.Errorf("failed to update status to stopping: %w", err)
+	}
+
+	// 2. Publish cancel message to Redis control channel to abort ongoing queue jobs
+	controlKey := s.keys.Prefix + ":control"
+	if err := s.rdb.Publish(ctx, controlKey, taskId).Err(); err != nil {
+		return fmt.Errorf("failed to publish stop signal: %w", err)
+	}
+
+	return nil
+}
+
+func (s *DastService) GetTaskAssets(ctx context.Context, taskId string) ([]model.DastAsset, error) {
+	results, err := s.rdb.LRange(ctx, s.keys.AssetsKey(taskId), 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var assets []model.DastAsset
+	for _, raw := range results {
+		var asset model.DastAsset
+		if err := json.Unmarshal([]byte(raw), &asset); err == nil {
+			assets = append(assets, asset)
+		}
+	}
+	return assets, nil
+}
+

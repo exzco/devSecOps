@@ -3,12 +3,11 @@ package handler
 import (
 	"context"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"devsecops/internal/dast/service"
-	"devsecops/internal/model"
 )
 
 type PocHandler struct {
@@ -19,23 +18,19 @@ func NewPocHandler(svc *service.PocService) *PocHandler {
 	return &PocHandler{svc: svc}
 }
 
-func (h *PocHandler) CreatePoc(c *gin.Context) {
-	var poc model.PocTemplate
-	if err := c.ShouldBindJSON(&poc); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+type CreatePocRequest struct {
+	Name        string   `json:"name" binding:"required"`
+	Description string   `json:"description"`
+	Severity    string   `json:"severity"`
+	Tags        []string `json:"tags"`
+	Content     string   `json:"content" binding:"required"`
+}
 
-	ctx := context.Background()
-	if err := h.svc.CreatePoc(ctx, &poc); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "PoC template created successfully",
-		"data":    poc,
-	})
+type UpdatePocRequest struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Severity    string   `json:"severity"`
+	Tags        []string `json:"tags"`
 }
 
 func (h *PocHandler) ListPocs(c *gin.Context) {
@@ -45,56 +40,61 @@ func (h *PocHandler) ListPocs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{"message": "ok", "data": pocs})
+}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "PoC templates fetched successfully",
-		"data":    pocs,
-	})
+func (h *PocHandler) CreatePoc(c *gin.Context) {
+	var req CreatePocRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Severity == "" {
+		req.Severity = "info"
+	}
+
+	ctx := context.Background()
+	meta, err := h.svc.CreatePoc(ctx, req.Name, req.Description, req.Severity, req.Tags, req.Content)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "PoC 模板创建成功", "data": meta})
 }
 
 func (h *PocHandler) UpdatePoc(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID format"})
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少模板 ID"})
 		return
 	}
 
-	var req model.PocTemplate
+	var req UpdatePocRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	req.ID = uint(id)
 	ctx := context.Background()
-	if err := h.svc.UpdatePoc(ctx, &req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	meta, err := h.svc.UpdatePoc(ctx, id, req.Name, req.Description, req.Severity, req.Tags)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "PoC template updated successfully",
-		"data":    req,
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "模板更新成功", "data": meta})
 }
 
 func (h *PocHandler) DeletePoc(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ID format"})
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少模板 ID"})
 		return
 	}
 
 	ctx := context.Background()
-	if err := h.svc.DeletePoc(ctx, uint(id)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := h.svc.DeletePoc(ctx, id); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "PoC template deleted successfully",
-		"data":    gin.H{"id": id},
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "模板已删除", "data": gin.H{"id": id}})
 }

@@ -213,6 +213,12 @@ body {
 .ant-table-row:hover > td {
   background: #fafafa !important; /* Hover state light */
 }
+.ant-table-tbody > tr.ant-table-row-selected > td {
+  background: #f4f4f5 !important; /* Shadcn light zinc-100 selected state */
+}
+.ant-table-tbody > tr.ant-table-row-selected:hover > td {
+  background: #e4e4e7 !important; /* hover zinc-200 */
+}
 
 /* Modals & Drawers - Shadcn light style */
 .ant-modal-content {

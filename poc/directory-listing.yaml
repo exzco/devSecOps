@@ -1,0 +1,34 @@
+id: directory-listing
+
+info:
+  name: Directory Listing - Enabled
+  author: pdteam,joanbono
+  severity: medium
+  description: |
+    Directory listing is enabled on the web server. An attacker can view directory contents and enumerate files.
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-548
+  metadata:
+    max-request: 1
+  tags: misconfig,generic,listing,exposure,web
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Index of /"
+          - "Directory listing for"
+          - "Parent Directory"
+        condition: or
+
+      - type: status
+        status:
+          - 200

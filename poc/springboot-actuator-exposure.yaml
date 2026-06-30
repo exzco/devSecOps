@@ -1,0 +1,40 @@
+id: springboot-actuator-exposure
+
+info:
+  name: Spring Boot Actuator Endpoints - Exposure
+  author: pdteam,pussycat0x
+  severity: high
+  description: |
+    Spring Boot Actuator management endpoints are exposed without authentication.
+    These can leak sensitive system information, environment variables, and even allow remote code execution.
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    max-request: 4
+  tags: exposure,springboot,java,web,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator"
+      - "{{BaseURL}}/actuator/env"
+      - "{{BaseURL}}/actuator/health"
+      - "{{BaseURL}}/manage/actuator"
+
+    stop-at-first-match: true
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"_links"'
+          - '"diskSpace"'
+          - '"components"'
+        condition: or
+
+      - type: status
+        status:
+          - 200

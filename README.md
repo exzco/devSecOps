@@ -39,20 +39,11 @@ docker run --name minio-devsecops -p 9000:9000 -p 9001:9001 -e MINIO_ROOT_USER=m
 
 ## 二、快速启动指南
 
-### 1. 前端构建与运行 (Web)
-
 ```bash
-cd web & npm install & npm run build
+go mod tidy 
+cd web && npm run build
+go build -o devsecops main.go
 ```
-
-### 2. 后端构建与运行 (Server)
-
-```bash
-go mod tidy
-
-go build -o devsecops main.go & ./devsecops
-```
-
 ---
 
 ## 三、核心 API 详解

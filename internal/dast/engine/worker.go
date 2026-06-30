@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"devsecops/internal/config"
 	"devsecops/internal/dast/logger"
 	"devsecops/internal/dast/queue"
+	"devsecops/internal/dast/service"
 	"devsecops/internal/model"
 )
 
@@ -51,7 +53,8 @@ func startControlListener(ctx context.Context, rdb *queue.QueueClient, keys queu
 				taskId := strings.TrimSpace(msg.Payload)
 				if taskId != "" {
 					cancelTask(taskId)
-					logger.Printf("[control] DAST Task %s cancellation received. Skipping future jobs.\n", taskId)
+					logger.Printf("[control] DAST Task %s cancellation received. Marking as stopped.\n", taskId)
+					_ = rdb.HSet(ctx, keys.StatusKey(taskId), "status", "stopped")
 				}
 			}
 		}
@@ -148,8 +151,22 @@ func RunPortWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClie
 			_ = rdb.Push(ctx, keys.FpJobs(), string(data))
 		}
 
+		if len(openPorts) == 0 {
+			// 没有开放端口，直接存入资产
+			asset := model.DastAsset{
+				Host:      scanHost,
+				Port:      0,
+				Proto:     "tcp",
+				Service:   "无 (所有扫描端口关闭/过滤)",
+				Timestamp: time.Now().Format(time.RFC3339),
+			}
+			b, _ := json.Marshal(asset)
+			_ = rdb.Push(ctx, keys.AssetsKey(job.TaskId), string(b))
+		}
+
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "scanned_ips", 1)
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "open_ports", int64(len(openPorts)))
+		checkTaskCompletion(ctx, rdb, keys, job.TaskId)
 		logger.Printf("[port-worker] done ip=%s open=%d ports, pushed to %s, cost=%s\n",
 			job.IP, len(openPorts), keys.FpJobs(), duration)
 
@@ -247,7 +264,26 @@ func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient
 		data, _ := json.Marshal(pocJob)
 		_ = rdb.Push(ctx, keys.PocJobs(), string(data))
 
+		// 将扫描发现的开放端口及服务指纹推入 Redis 列表中
+		asset := model.DastAsset{
+			Host:        job.Host,
+			Port:        job.Port,
+			Proto:       result.Proto,
+			Service:     result.Service,
+			Product:     result.Product,
+			Version:     result.Version,
+			CPEs:        result.CPEs,
+			RawResponse: result.RawResponse,
+			Timestamp:   time.Now().Format(time.RFC3339),
+		}
+		if asset.Service == "" {
+			asset.Service = "unknown"
+		}
+		assetBytes, _ := json.Marshal(asset)
+		_ = rdb.Push(ctx, keys.AssetsKey(job.TaskId), string(assetBytes))
+
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_done", 1)
+		checkTaskCompletion(ctx, rdb, keys, job.TaskId)
 		logger.Printf("[fp-worker] done host=%s:%d → target=%s tags=%v, cost=%s\n",
 			job.Host, job.Port, result.URL, result.Tags, duration)
 
@@ -282,7 +318,7 @@ func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient
 	}
 }
 
-func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient, keys queue.QueueKeys) {
+func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient, keys queue.QueueKeys, pocSvc *service.PocService) {
 	logger.Printf("[poc-worker] started, waiting for jobs on %s ...\n", keys.PocJobs())
 
 	for {
@@ -318,13 +354,34 @@ func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClien
 			job.TaskId, job.Target, job.Tags)
 
 		startTime := time.Now()
-		findings, err := ScanWithTags(ctx, job.Target, job.Tags, cfg.Dast.PocDir)
+
+		// 1. 从 MinIO 动态拉取该指纹标签对应的 PoC 模板到本地临时目录
+		tempPocDir, downloadErr := pocSvc.DownloadMatchedPocs(ctx, job.Tags)
+		if downloadErr != nil {
+			logger.Printf("[poc-worker] 从 MinIO 匹配下载 PoC 失败 target=%s: %v\n", job.Target, downloadErr)
+			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
+			continue
+		}
+
+		// 2. 若没有匹配到任何 PoC，则直接跳过
+		if tempPocDir == "" {
+			logger.Printf("[poc-worker] 未匹配到 target=%s 标签 %v 的任何 PoC 模板，跳过检测\n", job.Target, job.Tags)
+			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
+			continue
+		}
+
+		// 3. 执行 nuclei 扫描
+		findings, err := ScanWithTags(ctx, job.Target, job.Tags, tempPocDir)
 		duration := time.Since(startTime)
+
+		// 4. 扫描完成后立即清理本地临时目录
+		_ = os.RemoveAll(tempPocDir)
 
 		if err != nil {
 			logger.Printf("[poc-worker] scan failed target=%s: %v, cost=%s\n",
 				job.Target, err, duration)
 			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
+			checkTaskCompletion(ctx, rdb, keys, job.TaskId)
 			continue
 		}
 
@@ -338,6 +395,7 @@ func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClien
 
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "findings", int64(len(findings)))
+		checkTaskCompletion(ctx, rdb, keys, job.TaskId)
 		logger.Printf("[poc-worker] done target=%s findings=%d cost=%s\n",
 			job.Target, len(findings), duration)
 
@@ -353,7 +411,7 @@ func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClien
 	}
 }
 
-func StartAllDastWorkers(ctx context.Context, cfg *config.Config) {
+func StartAllDastWorkers(ctx context.Context, cfg *config.Config, pocSvc *service.PocService) {
 	keys := queue.NewQueueKeys(cfg.Dast.QueuePrefix)
 	rdb := queue.NewQueueClient(cfg.Redis, cfg.DastDialTimeout(), cfg.DastReadTimeout())
 
@@ -361,7 +419,42 @@ func StartAllDastWorkers(ctx context.Context, cfg *config.Config) {
 
 	go RunPortWorker(ctx, cfg, rdb, keys)
 	go RunFpWorker(ctx, cfg, rdb, keys)
-	go RunPocWorker(ctx, cfg, rdb, keys)
+	go RunPocWorker(ctx, cfg, rdb, keys, pocSvc)
 
 	logger.Printf("[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started.\n")
+}
+
+func checkTaskCompletion(ctx context.Context, rdb *queue.QueueClient, keys queue.QueueKeys, taskId string) {
+	statusMap, err := rdb.Rdb.HGetAll(ctx, keys.StatusKey(taskId)).Result()
+	if err != nil || len(statusMap) == 0 {
+		return
+	}
+
+	currentStatus := statusMap["status"]
+	if currentStatus == "success" || currentStatus == "stopped" || currentStatus == "stopping" {
+		return
+	}
+
+	totalIPs, _ := strconv.Atoi(statusMap["total_ips"])
+	scannedIPs, _ := strconv.Atoi(statusMap["scanned_ips"])
+	openPorts, _ := strconv.Atoi(statusMap["open_ports"])
+	fpDone, _ := strconv.Atoi(statusMap["fp_done"])
+	pocDone, _ := strconv.Atoi(statusMap["poc_done"])
+
+	logger.Printf("[worker-monitor] Debug Task %s: scanned=%d/%d, open_ports=%d, fp_done=%d, poc_done=%d, status=%s\n",
+		taskId, scannedIPs, totalIPs, openPorts, fpDone, pocDone, currentStatus)
+
+	isCompleted := false
+	if scannedIPs >= totalIPs {
+		if openPorts == 0 {
+			isCompleted = true
+		} else if fpDone >= openPorts && pocDone >= fpDone {
+			isCompleted = true
+		}
+	}
+
+	if isCompleted {
+		_ = rdb.Rdb.HSet(ctx, keys.StatusKey(taskId), "status", "success")
+		logger.Printf("[worker-monitor] DAST Task %s marked as success (completed).\n", taskId)
+	}
 }

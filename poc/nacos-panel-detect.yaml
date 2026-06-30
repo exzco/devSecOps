@@ -1,0 +1,28 @@
+id: nacos-panel-detect
+
+info:
+  name: Nacos Console Detect
+  author: davyxx
+  severity: info
+  description: Nacos console panel was detected, which could be exposed.
+  tags: tech,nacos,discovery,web
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/nacos/"
+      - "{{BaseURL}}/nacos/index.html"
+
+    stop-at-first-match: true
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "nacos"
+          - "Nacos"
+        condition: or
+
+      - type: status
+        status:
+          - 200

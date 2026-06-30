@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -16,6 +18,10 @@ type ProbeResult struct {
 	Proto       string
 	Tags        []string
 	RawResponse string
+	Service     string
+	Product     string
+	Version     string
+	CPEs        []string
 }
 
 var FallbackTags = []string{"exposure", "misconfig", "config"}
@@ -40,6 +46,7 @@ func NmapProbe(ctx context.Context, host string, port int) (ProbeResult, error) 
 		nmap.WithVersionIntensity(5),
 		nmap.WithSkipHostDiscovery(),
 		nmap.WithDisabledDNSResolution(),
+		nmap.WithScripts("banner"), // 启用 banner 脚本获取端口 TCP socket 原始响应
 	)
 	if err != nil {
 		return ProbeResult{}, fmt.Errorf("[nmap-probe] create scanner failed: %w", err)
@@ -61,36 +68,134 @@ func NmapProbe(ctx context.Context, host string, port int) (ProbeResult, error) 
 				continue
 			}
 
-			svcName := strings.ToLower(strings.TrimSpace(p.Service.Name))
-			product := strings.TrimSpace(p.Service.Product)
-			version := strings.TrimSpace(p.Service.Version)
-			extraInfo := strings.TrimSpace(p.Service.ExtraInfo)
-			isTunnel := strings.ToLower(strings.TrimSpace(p.Service.Tunnel)) == "ssl"
-			proto, url := resolveProtoURL(svcName, isTunnel, hostPort)
-			tags := nmapServiceToTags(svcName, product, isTunnel)
-			rawResp := fmt.Sprintf(
-				"service=%s product=%s version=%s extraInfo=%s tunnel=%v confidence=%d",
-				svcName, product, version, extraInfo, isTunnel, p.Service.Confidence,
-			)
+			svc := p.Service
+			svcName := strings.ToLower(strings.TrimSpace(svc.Name))
+			product := strings.TrimSpace(svc.Product)
+			version := strings.TrimSpace(svc.Version)
+			extraInfo := strings.TrimSpace(svc.ExtraInfo)
+			osType := strings.TrimSpace(svc.OSType)
+			deviceType := strings.TrimSpace(svc.DeviceType)
+			isTunnel := strings.ToLower(strings.TrimSpace(svc.Tunnel)) == "ssl"
 
-			logger.Printf("[nmap-probe] %s → service=%s product=%s version=%s tags=%v\n",
-				hostPort, svcName, product, version, tags)
+			proto, url := resolveProtoURL(svcName, isTunnel, hostPort)
+			tags := buildTags(svcName, product, version, osType, deviceType, isTunnel, svc.CPEs)
+
+			// 优先读取 nmap -script=banner 的原始 TCP 套接字响应
+			var rawResp string
+			for _, script := range p.Scripts {
+				if script.ID == "banner" {
+					rawResp = strings.TrimSpace(script.Output)
+					break
+				}
+			}
+
+			// 如果没拿到原始 banner，则回退为格式化的指纹信息
+			if rawResp == "" {
+				rawResp = fmt.Sprintf(
+					"service=%s product=%s version=%s osType=%s deviceType=%s extraInfo=%s cpes=%v confidence=%d",
+					svcName, product, version, osType, deviceType, extraInfo, svc.CPEs, svc.Confidence,
+				)
+			}
+
+			logger.Printf("[nmap-probe] %s → service=%s product=%s version=%s osType=%s cpes=%v tags=%v\n",
+				hostPort, svcName, product, version, osType, svc.CPEs, tags)
+
+			cpeStrings := []string{}
+			for _, cpe := range svc.CPEs {
+				cpeStrings = append(cpeStrings, string(cpe))
+			}
 
 			return ProbeResult{
 				URL:         url,
 				Proto:       proto,
 				Tags:        tags,
 				RawResponse: rawResp,
+				Service:     svcName,
+				Product:     product,
+				Version:     version,
+				CPEs:        cpeStrings,
 			}, nil
 		}
 	}
 
-	logger.Printf("[nmap-probe] %s → no service detected, using default tags\n", hostPort)
+	logger.Printf("[nmap-probe] %s → no service detected by nmap. Falling back to fingerprintx...\n", hostPort)
+	fxResult, fxErr := FingerprintxProbe(ctx, host, port)
+	if fxErr == nil && fxResult.Service != "" && fxResult.Service != "unknown" {
+		logger.Printf("[nmap-probe] %s → fingerprintx fallback successfully identified: service=%s tags=%v\n", hostPort, fxResult.Service, fxResult.Tags)
+		return fxResult, nil
+	}
+
+	logger.Printf("[nmap-probe] %s → both nmap and fingerprintx failed. using fallback tags. err=%v\n", hostPort, fxErr)
 	return ProbeResult{
 		URL:         hostPort,
 		Proto:       "tcp",
 		Tags:        FallbackTags,
-		RawResponse: "nmap: no service detected",
+		RawResponse: "nmap: no service detected; fingerprintx: " + fmt.Sprintf("%v", fxErr),
+		Service:     "unknown",
+	}, nil
+}
+
+type FingerprintxOutput struct {
+	Host      string `json:"host"`
+	Port      int    `json:"port"`
+	Protocol  string `json:"protocol"`
+	TLS       bool   `json:"tls"`
+	Transport string `json:"transport"`
+}
+
+// FingerprintxProbe 调用 fingerprintx 进行外部探测，解析其 JSON 响应并转化为统一结构
+func FingerprintxProbe(ctx context.Context, host string, port int) (ProbeResult, error) {
+	hostPort := fmt.Sprintf("%s:%d", host, port)
+
+	if _, err := exec.LookPath("fingerprintx"); err != nil {
+		return ProbeResult{}, fmt.Errorf("fingerprintx binary not found in PATH")
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(probeCtx, "fingerprintx", "-target", hostPort, "--json")
+	out, err := cmd.Output()
+	if err != nil {
+		return ProbeResult{}, fmt.Errorf("run fingerprintx failed: %w", err)
+	}
+
+	var fxOut FingerprintxOutput
+	lines := strings.Split(string(out), "\n")
+	parsed := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasPrefix(line, "{") {
+			continue
+		}
+		if err := json.Unmarshal([]byte(line), &fxOut); err == nil {
+			parsed = true
+			break
+		}
+	}
+
+	if !parsed || fxOut.Protocol == "" {
+		return ProbeResult{}, fmt.Errorf("no service identified by fingerprintx")
+	}
+
+	svcName := strings.ToLower(fxOut.Protocol)
+	isTunnel := fxOut.TLS
+	proto, url := resolveProtoURL(svcName, isTunnel, hostPort)
+	
+	// 组装 tags 列表
+	tags := []string{svcName, "web"}
+	if isTunnel {
+		tags = append(tags, "ssl", "https")
+	} else if svcName == "http" {
+		tags = append(tags, "http")
+	}
+
+	return ProbeResult{
+		URL:         url,
+		Proto:       proto,
+		Tags:        tags,
+		RawResponse: fmt.Sprintf("fingerprintx: service=%s tls=%v transport=%s", svcName, isTunnel, fxOut.Transport),
+		Service:     svcName,
 	}, nil
 }
 
@@ -104,19 +209,63 @@ func resolveProtoURL(svcName string, isTunnel bool, hostPort string) (proto, url
 	return "tcp", hostPort
 }
 
-func nmapServiceToTags(svcName, product string, isTunnel bool) []string {
+// buildTags 从 nmap 的所有服务信息中提取尽可能精准的 tag 集合。
+// 优先级: CPE > product > svcName > OSType/DeviceType
+func buildTags(svcName, product, version, osType, deviceType string, isTunnel bool, cpes []nmap.CPE) []string {
 	if svcName == "" || svcName == "unknown" {
 		return FallbackTags
 	}
 
 	tagSet := make(map[string]bool)
-	tagSet[normalizeTag(svcName)] = true
 
-	if product != "" {
-		productTag := normalizeTag(product)
-		tagSet[productTag] = true
+	// 1. 从 CPE 解析产品名（最精准）
+	// CPE 格式: cpe:/a:vendor:product:version 或 cpe:/o:vendor:os:version
+	for _, cpe := range cpes {
+		parts := strings.Split(string(cpe), ":")
+		// parts[0]="cpe", [1]="/a", [2]=vendor, [3]=product, [4]=version
+		if len(parts) >= 4 {
+			cpeProduct := strings.ToLower(parts[3])
+			if cpeProduct != "" && cpeProduct != "*" {
+				tagSet[cpeProduct] = true
+			}
+		}
+		if len(parts) >= 3 {
+			cpeVendor := strings.ToLower(parts[2])
+			if cpeVendor != "" && cpeVendor != "*" {
+				tagSet[cpeVendor] = true
+			}
+		}
 	}
 
+	// 2. product 字段拆词（"Apache httpd" → "apache"、"httpd"）
+	if product != "" {
+		for _, word := range strings.Fields(product) {
+			tag := normalizeTag(word)
+			if len(tag) >= 2 {
+				tagSet[tag] = true
+			}
+		}
+	}
+
+	// 3. svcName 本身
+	tagSet[svcName] = true
+
+	// 4. 版本号（部分 nuclei 模板按版本过滤）
+	if version != "" {
+		tagSet[version] = true
+	}
+
+	// 5. OSType（如 "Windows", "Linux"）
+	if osType != "" {
+		tagSet[normalizeTag(osType)] = true
+	}
+
+	// 6. DeviceType（如 "router", "printer", "webcam"）
+	if deviceType != "" {
+		tagSet[normalizeTag(deviceType)] = true
+	}
+
+	// 7. 协议族补充 tag（与原逻辑保持兼容）
 	switch {
 	case svcName == "http" || strings.HasPrefix(svcName, "http"):
 		tagSet["web"] = true

@@ -77,6 +77,13 @@ export const getDastTaskResults = (taskId: string) =>
 export const deleteDastTask = (taskId: string) =>
   api.post(`/dast/scan/tasks/delete/${taskId}`);
 
+export const stopDastTask = (taskId: string) =>
+  api.post(`/dast/scan/tasks/stop/${taskId}`);
+
+export const getDastTaskAssets = (taskId: string) =>
+  api.get(`/dast/scan/tasks/${taskId}/assets`);
+
+
 // ==================== DAST PoC APIs ====================
 export const getDastPocList = () =>
   api.get('/dast/pocs');
@@ -84,10 +91,10 @@ export const getDastPocList = () =>
 export const createDastPoc = (data: any) =>
   api.post('/dast/pocs', data);
 
-export const updateDastPoc = (id: number, data: any) =>
+export const updateDastPoc = (id: string, data: any) =>
   api.post(`/dast/pocs/update/${id}`, data);
 
-export const deleteDastPoc = (id: number) =>
+export const deleteDastPoc = (id: string) =>
   api.post(`/dast/pocs/delete/${id}`);
 
 export default api;

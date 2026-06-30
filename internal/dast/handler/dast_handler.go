@@ -101,3 +101,33 @@ func (h *DastHandler) DeleteTask(c *gin.Context) {
 		"data":    gin.H{"task_id": taskId},
 	})
 }
+
+func (h *DastHandler) StopTask(c *gin.Context) {
+	taskId := c.Param("id")
+	ctx := context.Background()
+	if err := h.svc.StopTask(ctx, taskId); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "DAST task stopped",
+		"data":    gin.H{"task_id": taskId},
+	})
+}
+
+func (h *DastHandler) GetTaskAssets(c *gin.Context) {
+	taskId := c.Param("id")
+	ctx := context.Background()
+	assets, err := h.svc.GetTaskAssets(ctx, taskId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "DAST task assets fetched",
+		"data":    assets,
+	})
+}
+

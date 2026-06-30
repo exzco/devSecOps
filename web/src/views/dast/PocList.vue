@@ -1,47 +1,57 @@
 <template>
   <div class="w-full mx-auto max-w-screen-2xl flex flex-col gap-6 bg-white p-2">
-    <!-- Main Card -->
-    <a-card title="DAST PoC 模版管理" :bordered="false" class="rounded-lg shadow-sm border border-zinc-200 bg-white">
+    <a-card title="DAST PoC 模板管理" :bordered="false" class="rounded-lg border border-zinc-200 bg-white">
       <template #extra>
-        <a-button type="primary" class="!bg-zinc-950 !border-zinc-950 !text-white hover:!bg-zinc-800" @click="showCreateModal">
-          新增 PoC 模版
+        <a-button
+          type="primary"
+          class="!bg-zinc-950 !border-zinc-950 !text-white hover:!bg-zinc-800"
+          @click="showCreateModal"
+        >
+          新增 PoC 模板
         </a-button>
       </template>
 
       <a-table
-        row-key="ID"
+        row-key="id"
         :columns="columns"
         :data-source="pocData"
         :loading="loading"
         size="middle"
-        :pagination="{ pageSize: 10 }"
+        :scroll="{ x: '100%' }"
+        :pagination="{ pageSize: 15 }"
         class="bg-white"
       >
-        <template #bodyCell="{ text, record, column }">
+        <template #bodyCell="{ record, column }">
           <template v-if="column.dataIndex === 'severity'">
             <a-tag :color="severityColor(record.severity)" class="font-semibold px-2 py-0.5 uppercase">
-              {{ record.severity }}
+              {{ record.severity || 'info' }}
             </a-tag>
           </template>
 
-          <template v-if="column.dataIndex === 'UpdatedAt'">
-            {{ new Date(record.UpdatedAt).toLocaleString() }}
+          <template v-if="column.dataIndex === 'tags'">
+            <a-space :size="4" wrap>
+              <a-tag v-for="t in (record.tags || [])" :key="t" color="default" class="font-mono text-xs">
+                {{ t }}
+              </a-tag>
+            </a-space>
+          </template>
+
+          <template v-if="column.dataIndex === 'updated_at'">
+            {{ record.updated_at ? new Date(record.updated_at).toLocaleString() : '-' }}
           </template>
 
           <template v-if="column.key === 'actions'">
             <a-space :size="8">
-              <a-button type="link" size="small" @click="showEditModal(record)">
+              <a-button type="link" size="small" class="!p-0" @click="showEditModal(record)">
                 编辑
               </a-button>
               <a-popconfirm
-                title="确认删除该 PoC 模板吗？"
+                title="确认删除该 PoC 模板？"
                 ok-text="确认"
                 cancel-text="取消"
-                @confirm="handleDelete(record.ID)"
+                @confirm="handleDelete(record.id)"
               >
-                <a-button type="link" danger size="small">
-                  删除
-                </a-button>
+                <a-button type="link" danger size="small" class="!p-0">删除</a-button>
               </a-popconfirm>
             </a-space>
           </template>
@@ -49,23 +59,24 @@
       </a-table>
     </a-card>
 
-    <!-- Create/Edit Modal -->
+    <!-- 新增 Modal -->
     <a-modal
-      v-model:visible="modalVisible"
-      :title="editingId ? '编辑 PoC 模版' : '新增 PoC 模版'"
-      @ok="handleSave"
+      v-model:open="modalVisible"
+      :title="editingId ? '编辑 PoC 模板' : '新增 PoC 模板'"
       ok-text="保存"
       cancel-text="取消"
       width="720px"
       :confirm-loading="saveLoading"
+      @ok="handleSave"
+      @cancel="modalVisible = false"
     >
-      <a-form :model="formState" layout="vertical" class="pt-4 space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <a-form-item label="模版名称 (Name)" required>
-            <a-input v-model:value="formState.name" placeholder="例如：cve-2026-xxxx-rce" />
+      <a-form :model="formState" layout="vertical" class="pt-4">
+        <div class="grid grid-cols-2 gap-4">
+          <a-form-item label="模板名称" required>
+            <a-input v-model:value="formState.name" placeholder="例如: nginx-version-detect" :disabled="!!editingId" />
           </a-form-item>
-          <a-form-item label="危害等级 (Severity)" required>
-            <a-select v-model:value="formState.severity" placeholder="请选择危害等级">
+          <a-form-item label="危害等级" required>
+            <a-select v-model:value="formState.severity">
               <a-select-option value="critical">Critical</a-select-option>
               <a-select-option value="high">High</a-select-option>
               <a-select-option value="medium">Medium</a-select-option>
@@ -75,16 +86,20 @@
           </a-form-item>
         </div>
 
-        <a-form-item label="描述 (Description)">
-          <a-input v-model:value="formState.description" placeholder="请输入对该 PoC 漏洞原理的简要描述" />
+        <a-form-item label="标签 Tags（空格或逗号分隔）">
+          <a-input v-model:value="formState.tagsRaw" placeholder="例如: nginx http web" />
         </a-form-item>
 
-        <a-form-item label="PoC 规则详情 (YAML 格式)" required>
+        <a-form-item label="描述">
+          <a-input v-model:value="formState.description" placeholder="对该模板漏洞原理的简要描述" />
+        </a-form-item>
+
+        <a-form-item v-if="!editingId" label="PoC 内容 (Nuclei YAML)" required>
           <a-textarea
             v-model:value="formState.content"
-            :rows="12"
-            class="font-mono text-xs p-3 bg-zinc-50 border-zinc-200 focus:border-zinc-400 focus:ring-1 focus:ring-zinc-400"
-            placeholder="id: cve-xxxx-xxxx&#10;info:&#10;  name: Target Vulnerability&#10;  severity: high&#10;requests:&#10;  - method: GET&#10;    path:&#10;      - &quot;{{BaseURL}}/check-leak&quot;&#10;    matchers:&#10;      - type: word&#10;        words:&#10;          - &quot;root:x:&quot;"
+            :rows="14"
+            class="font-mono text-xs bg-zinc-50"
+            placeholder="id: my-poc&#10;info:&#10;  name: My PoC&#10;  severity: info&#10;http:&#10;  - method: GET&#10;    path:&#10;      - '{{BaseURL}}/'&#10;    matchers:&#10;      - type: word&#10;        words:&#10;          - 'example'"
           />
         </a-form-item>
       </a-form>
@@ -95,61 +110,59 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue';
 import { message } from 'ant-design-vue';
-import {
-  getDastPocList,
-  createDastPoc,
-  updateDastPoc,
-  deleteDastPoc
-} from '../../api';
+import { getDastPocList, createDastPoc, updateDastPoc, deleteDastPoc } from '../../api';
 
 interface PocRecord {
-  ID: number;
+  id: string;
   name: string;
   description: string;
   severity: string;
-  content: string;
-  UpdatedAt: string;
+  tags: string[];
+  file_path: string;
+  created_at: string;
+  updated_at: string;
 }
 
 const loading = ref(false);
+const saveLoading = ref(false);
 const pocData = ref<PocRecord[]>([]);
 const modalVisible = ref(false);
-const editingId = ref<number | null>(null);
-const saveLoading = ref(false);
+const editingId = ref('');
 
 const formState = reactive({
   name: '',
-  severity: 'high',
   description: '',
-  content: ''
+  severity: 'info',
+  tagsRaw: '',
+  content: '',
 });
 
 const columns = [
-  { title: '模版名称', dataIndex: 'name', key: 'name', width: 220 },
-  { title: '危险等级', dataIndex: 'severity', key: 'severity', width: 120 },
-  { title: '简要描述', dataIndex: 'description', key: 'description', ellipsis: true },
-  { title: '修改时间', dataIndex: 'UpdatedAt', key: 'UpdatedAt', width: 180 },
-  { title: '操作', key: 'actions', width: 140 }
+  { title: '模板 ID', dataIndex: 'id', key: 'id', width: 220, ellipsis: true },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 180 },
+  { title: '等级', dataIndex: 'severity', key: 'severity', width: 100 },
+  { title: 'Tags', dataIndex: 'tags', key: 'tags', width: 240 },
+  { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
+  { title: '更新时间', dataIndex: 'updated_at', key: 'updated_at', width: 180 },
+  { title: '操作', key: 'actions', width: 120, fixed: 'right' as const },
 ];
 
-const severityColor = (severity: string) => {
-  const s = (severity || '').toLowerCase();
+const severityColor = (s: string) => {
   const map: Record<string, string> = {
-    critical: 'red',
-    high: 'orange',
-    medium: 'gold',
-    low: 'blue',
-    info: 'green'
+    critical: 'red', high: 'orange', medium: 'gold', low: 'blue', info: 'green',
   };
-  return map[s] || 'default';
+  return map[(s || '').toLowerCase()] || 'default';
 };
+
+const parseTags = (raw: string) =>
+  raw.split(/[\s,]+/).map((t: string) => t.trim()).filter(Boolean);
 
 const loadPocs = async () => {
   loading.value = true;
   try {
     const res = await getDastPocList();
     pocData.value = res.data.data || [];
-  } catch (err) {
+  } catch {
     message.error('获取 PoC 模板列表失败');
   } finally {
     loading.value = false;
@@ -157,70 +170,64 @@ const loadPocs = async () => {
 };
 
 const showCreateModal = () => {
-  editingId.value = null;
-  formState.name = '';
-  formState.severity = 'high';
-  formState.description = '';
-  formState.content = '';
+  editingId.value = '';
+  Object.assign(formState, { name: '', description: '', severity: 'info', tagsRaw: '', content: '' });
   modalVisible.value = true;
 };
 
 const showEditModal = (record: PocRecord) => {
-  editingId.value = record.ID;
-  formState.name = record.name;
-  formState.severity = record.severity;
-  formState.description = record.description;
-  formState.content = record.content;
+  editingId.value = record.id;
+  Object.assign(formState, {
+    name: record.name,
+    description: record.description,
+    severity: record.severity,
+    tagsRaw: (record.tags || []).join(' '),
+    content: '',
+  });
   modalVisible.value = true;
 };
 
 const handleSave = async () => {
-  if (!formState.name.trim()) {
-    message.error('模版名称不能为空');
-    return;
-  }
-  if (!formState.content.trim()) {
-    message.error('PoC YAML 内容不能为空');
-    return;
-  }
-
   saveLoading.value = true;
   try {
-    const payload = {
-      name: formState.name.trim(),
-      severity: formState.severity,
-      description: formState.description.trim(),
-      content: formState.content
-    };
-
     if (editingId.value) {
-      await updateDastPoc(editingId.value, payload);
-      message.success('PoC 模板更新成功');
+      await updateDastPoc(editingId.value, {
+        name: formState.name,
+        description: formState.description,
+        severity: formState.severity,
+        tags: parseTags(formState.tagsRaw),
+      });
+      message.success('模板信息已更新');
     } else {
-      await createDastPoc(payload);
+      if (!formState.name.trim()) { message.error('模板名称不能为空'); return; }
+      if (!formState.content.trim()) { message.error('模板内容不能为空'); return; }
+      await createDastPoc({
+        name: formState.name.trim(),
+        description: formState.description.trim(),
+        severity: formState.severity,
+        tags: parseTags(formState.tagsRaw),
+        content: formState.content,
+      });
       message.success('PoC 模板创建成功');
     }
     modalVisible.value = false;
     loadPocs();
   } catch (err: any) {
-    const errMsg = err.response?.data?.error || '保存 PoC 模板失败';
-    message.error(errMsg);
+    message.error(err.response?.data?.error || '保存失败');
   } finally {
     saveLoading.value = false;
   }
 };
 
-const handleDelete = async (id: number) => {
+const handleDelete = async (id: string) => {
   try {
     await deleteDastPoc(id);
-    message.success('PoC 模板删除成功');
+    message.success('模板已删除');
     loadPocs();
-  } catch (err) {
-    message.error('删除 PoC 模板失败');
+  } catch {
+    message.error('删除失败');
   }
 };
 
-onMounted(() => {
-  loadPocs();
-});
+onMounted(loadPocs);
 </script>

@@ -22,3 +22,15 @@ type PocJob struct {
 	Retry      int      `json:"retry"`
 	FailReason string   `json:"failReason,omitempty"`
 }
+
+type DastAsset struct {
+	Host        string   `json:"host"`
+	Port        int      `json:"port"`
+	Proto       string   `json:"proto"`
+	Service     string   `json:"service"`
+	Product     string   `json:"product"`
+	Version     string   `json:"version"`
+	CPEs        []string `json:"cpes"`
+	RawResponse string   `json:"raw_response"`
+	Timestamp   string   `json:"timestamp"`
+}
