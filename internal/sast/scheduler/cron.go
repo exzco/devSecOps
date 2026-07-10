@@ -6,8 +6,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/robfig/cron/v3"
 
-	"devsecops/internal/model"
-	"devsecops/internal/service"
+	sastModel "devsecops/internal/sast/model"
+	"devsecops/internal/sast/service"
 )
 
 type CronManager struct {
@@ -41,7 +41,7 @@ func (m *CronManager) Start() {
 			return
 		}
 
-		repoList, ok := repos.Data.([]model.Repository)
+		repoList, ok := repos.Data.([]sastModel.Repository)
 		if !ok {
 			log.Println("[Cron] Failed to cast repository list")
 			return
@@ -55,7 +55,7 @@ func (m *CronManager) Start() {
 				continue
 			}
 
-			task, err := m.scanSvc.CreateTask(repo.ID, model.TriggerTypeCron, repo.Branch, repo.Language, "", "", "")
+			task, err := m.scanSvc.CreateTask(repo.ID, sastModel.TriggerTypeCron, repo.Branch, repo.Language, "", "", "")
 			if err != nil {
 				log.Printf("[Cron] Failed to create scan task for repo %s: %v", repo.Name, err)
 				continue
@@ -69,7 +69,7 @@ func (m *CronManager) Start() {
 
 			info, err := m.asynqClient.Enqueue(asynqTask)
 			if err != nil {
-				m.scanSvc.UpdateTaskStatus(task.ID, model.TaskStatusFailed, map[string]interface{}{
+				m.scanSvc.UpdateTaskStatus(task.ID, sastModel.TaskStatusFailed, map[string]interface{}{
 					"error_msg": "failed to enqueue task: " + err.Error(),
 				})
 				log.Printf("[Cron] Failed to enqueue async task for repo %s: %v", repo.Name, err)

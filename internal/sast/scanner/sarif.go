@@ -204,7 +204,8 @@ func ParseSARIF(filePath string) ([]ParsedVulnerability, error) {
 			if fp, ok := result.PartialFingerprints["primaryLocationLineHash"]; ok {
 				vuln.Fingerprint = fp
 			} else {
-				base := fmt.Sprintf("%s|%s|%d|%d|%s", vuln.RuleID, vuln.FilePath, vuln.StartLine, vuln.EndLine, vuln.Message)
+				// 只用位置信息生成 fingerprint，避免因 message 含数据流路径描述不同而产生重复记录
+				base := fmt.Sprintf("%s|%s|%d|%d", vuln.RuleID, vuln.FilePath, vuln.StartLine, vuln.EndLine)
 				h := sha1.Sum([]byte(base))
 				vuln.Fingerprint = fmt.Sprintf("%x", h)
 			}
@@ -213,7 +214,38 @@ func ParseSARIF(filePath string) ([]ParsedVulnerability, error) {
 		}
 	}
 
+	// 对同一 Sink 位置的多条数据流路径进行合并去重
+	vulns = deduplicateVulns(vulns)
+
 	return vulns, nil
+}
+
+// deduplicateVulns 将同一规则、同一文件、同一行的漏洞合并为一条记录。
+// CodeQL 会对每条从 Source 到 Sink 的数据流路径各生成一个 Result，
+// 导致同一个漏洞点出现多次。此函数将多条路径合并到 DataFlow 数组中保留，
+// 前端可按需展开查看所有追踪路径。
+func deduplicateVulns(vulns []ParsedVulnerability) []ParsedVulnerability {
+	type sinkKey struct {
+		ruleID    string
+		filePath  string
+		startLine int
+	}
+
+	indexMap := make(map[sinkKey]int, len(vulns))
+	result := make([]ParsedVulnerability, 0, len(vulns))
+
+	for _, v := range vulns {
+		k := sinkKey{ruleID: v.RuleID, filePath: v.FilePath, startLine: v.StartLine}
+		if idx, exists := indexMap[k]; exists {
+			// 已存在相同 Sink 的记录：将新数据流路径追加合并
+			result[idx].DataFlow = append(result[idx].DataFlow, v.DataFlow...)
+		} else {
+			indexMap[k] = len(result)
+			result = append(result, v)
+		}
+	}
+
+	return result
 }
 
 func buildRuleMap(run SARIFRun) map[string]SARIFRule {

@@ -1,16 +1,15 @@
-# DevSecOps 自动化安全测试平台 (DevSecOps Platform)
+# DevSecOps 
 
-本平台是一个集成了 **SAST（静态应用安全测试，基于 CodeQL 驱动）** 与 **DAST（动态应用安全测试，基于自研 PoC 引擎）** 的自动化安全漏洞扫描与管理系统。前端采用 Shadcn Light 极简交互视觉规范，后端采用 Go Gin + Redis 队列进行高并发任务调度。
-
+本平台是一个集成了 **SAST** 与 **DAST** 的 DevSecOps 平台。
 ## 一、环境部署指南
 
 ### 1. 基础依赖项
 
-- **Go (v1.20+)**：后端 Gin 框架编译与运行。
+- **Go (v1.25.4+)**：后端 Gin 框架编译与运行。
 - **Node.js (v18+)**：前端 Vite-Vue 编译与构建。
 - **PostgreSQL (v12+)**：存储代码仓库、扫描任务、漏洞报告及 PoC 模板等核心数据。
-- **Redis (v6+)**：作为 Asynq 队列（SAST 扫描调度）与 DAST 动态扫描队列的支撑。
-- **CodeQL CLI (v2.25.6+)**：静态应用扫描的核心执行引擎，需预先下载解压。
+- **Redis (v6+)**：作为 Asynq 队列（SAST 扫描任务）与 DAST 动态扫描队列的支撑。
+- **CodeQL CLI (v2.25.6+)**：静态应用扫描的核心执行引擎，需预先下载配置好目录。
 - **CodeQL Queries**：CodeQL 官方库（查询规则文件），扫描时需要加载。
 
 ### 2. 依赖环境 Docker 部署命令

@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 
 	"devsecops/internal/model"
+	sastModel "devsecops/internal/sast/model"
 	"devsecops/internal/sast/scanner"
-	"devsecops/internal/sast/scheduler"
 )
 
 type ScanService struct {
@@ -26,8 +26,8 @@ func (s *ScanService) GetDB() *gorm.DB {
 	return s.db
 }
 
-func (s *ScanService) CreateTask(repoID uint, triggerType, branch, language, querySuite, ruleProfile, rules string) (*model.ScanTask, error) {
-	task := &model.ScanTask{
+func (s *ScanService) CreateTask(repoID uint, triggerType, branch, language, querySuite, ruleProfile, rules string) (*sastModel.ScanTask, error) {
+	task := &sastModel.ScanTask{
 		RepoID:      repoID,
 		TriggerType: triggerType,
 		Branch:      branch,
@@ -35,7 +35,7 @@ func (s *ScanService) CreateTask(repoID uint, triggerType, branch, language, que
 		QuerySuite:  querySuite,
 		RuleProfile: ruleProfile,
 		Rules:       rules,
-		Status:      model.TaskStatusPending,
+		Status:      sastModel.TaskStatusPending,
 	}
 
 	if err := s.db.Create(task).Error; err != nil {
@@ -44,15 +44,15 @@ func (s *ScanService) CreateTask(repoID uint, triggerType, branch, language, que
 	return task, nil
 }
 
-func (s *ScanService) GetTask(id uint) (*model.ScanTask, error) {
-	var task model.ScanTask
+func (s *ScanService) GetTask(id uint) (*sastModel.ScanTask, error) {
+	var task sastModel.ScanTask
 	if err := s.db.Preload("Repository").First(&task, id).Error; err != nil {
 		return nil, err
 	}
 	return &task, nil
 }
 
-func (s *ScanService) ListTasks(query *model.ScanTaskQuery) (*model.PaginatedResponse, error) {
+func (s *ScanService) ListTasks(query *sastModel.ScanTaskQuery) (*model.PaginatedResponse, error) {
 	if query.Page < 1 {
 		query.Page = 1
 	}
@@ -60,7 +60,7 @@ func (s *ScanService) ListTasks(query *model.ScanTaskQuery) (*model.PaginatedRes
 		query.PerPage = 20
 	}
 
-	db := s.db.Model(&model.ScanTask{})
+	db := s.db.Model(&sastModel.ScanTask{})
 	if query.RepoID > 0 {
 		db = db.Where("repo_id = ?", query.RepoID)
 	}
@@ -71,7 +71,7 @@ func (s *ScanService) ListTasks(query *model.ScanTaskQuery) (*model.PaginatedRes
 	var total int64
 	db.Count(&total)
 
-	var tasks []model.ScanTask
+	var tasks []sastModel.ScanTask
 	offset := (query.Page - 1) * query.PerPage
 	if err := db.Preload("Repository").Order("id DESC").Offset(offset).Limit(query.PerPage).Find(&tasks).Error; err != nil {
 		return nil, err
@@ -91,27 +91,27 @@ func (s *ScanService) UpdateTaskStatus(taskID uint, status string, updates map[s
 		updates = map[string]interface{}{}
 	}
 	updates["status"] = status
-	return s.db.Model(&model.ScanTask{}).Where("id = ?", taskID).Updates(updates).Error
+	return s.db.Model(&sastModel.ScanTask{}).Where("id = ?", taskID).Updates(updates).Error
 }
 
 func (s *ScanService) SaveVulnerabilities(taskID, repoID uint, parsed []scanner.ParsedVulnerability) (int, error) {
 	saved := 0
 	repoURL := ""
-	var repo model.Repository
+	var repo sastModel.Repository
 	if err := s.db.Select("url").First(&repo, repoID).Error; err == nil {
 		repoURL = repo.URL
 	}
 	for _, p := range parsed {
 		dataFlowJSON, _ := json.Marshal(p.DataFlow)
 
-		vuln := &model.Vulnerability{
+		vuln := &sastModel.Vulnerability{
 			ScanTaskID:  taskID,
 			RepoID:      repoID,
 			RepoURL:     repoURL,
 			RuleID:      p.RuleID,
 			RuleName:    p.RuleName,
 			Severity:    p.Severity,
-			Status:      model.VulnStatusNew,
+			Status:      sastModel.VulnStatusNew,
 			FilePath:    p.FilePath,
 			StartLine:   p.StartLine,
 			EndLine:     p.EndLine,
@@ -137,12 +137,12 @@ func (s *ScanService) SaveVulnerabilities(taskID, repoID uint, parsed []scanner.
 		saved++
 	}
 
-	s.db.Model(&model.ScanTask{}).Where("id = ?", taskID).Update("vuln_count", saved)
+	s.db.Model(&sastModel.ScanTask{}).Where("id = ?", taskID).Update("vuln_count", saved)
 
 	return saved, nil
 }
 
-func (s *ScanService) ListVulnerabilities(query *model.VulnQuery) (*model.PaginatedResponse, error) {
+func (s *ScanService) ListVulnerabilities(query *sastModel.VulnQuery) (*model.PaginatedResponse, error) {
 	if query.Page < 1 {
 		query.Page = 1
 	}
@@ -150,7 +150,7 @@ func (s *ScanService) ListVulnerabilities(query *model.VulnQuery) (*model.Pagina
 		query.PerPage = 20
 	}
 
-	db := s.db.Model(&model.Vulnerability{})
+	db := s.db.Model(&sastModel.Vulnerability{})
 	if query.RepoID > 0 {
 		db = db.Where("repo_id = ?", query.RepoID)
 	}
@@ -170,7 +170,7 @@ func (s *ScanService) ListVulnerabilities(query *model.VulnQuery) (*model.Pagina
 	var total int64
 	db.Count(&total)
 
-	var vulns []model.Vulnerability
+	var vulns []sastModel.Vulnerability
 	offset := (query.Page - 1) * query.PerPage
 	if err := db.Preload("Repository").Order("id DESC").Offset(offset).Limit(query.PerPage).Find(&vulns).Error; err != nil {
 		return nil, err
@@ -185,34 +185,35 @@ func (s *ScanService) ListVulnerabilities(query *model.VulnQuery) (*model.Pagina
 	}, nil
 }
 
-func (s *ScanService) GetVulnerability(id uint) (*model.Vulnerability, error) {
-	var vuln model.Vulnerability
+func (s *ScanService) GetVulnerability(id uint) (*sastModel.Vulnerability, error) {
+	var vuln sastModel.Vulnerability
 	if err := s.db.Preload("Repository").Preload("ScanTask").Preload("Assignee").First(&vuln, id).Error; err != nil {
 		return nil, err
 	}
 	return &vuln, nil
 }
 
+// ActiveTaskCanceler registry to be set by scheduler package to break import cycle
+var ActiveTaskCanceler func(taskID uint)
+
 func (s *ScanService) DeleteTask(taskID uint) error {
-	// Cancel the task if it is currently running
-	scheduler.ActiveTasksMu.Lock()
-	if cancel, exists := scheduler.ActiveTasks[taskID]; exists {
-		cancel()
+	// Cancel the task if it is currently running (notified via callback to break import cycle)
+	if ActiveTaskCanceler != nil {
+		ActiveTaskCanceler(taskID)
 	}
-	scheduler.ActiveTasksMu.Unlock()
 
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("scan_task_id = ?", taskID).Delete(&model.Vulnerability{}).Error; err != nil {
+		if err := tx.Unscoped().Where("scan_task_id = ?", taskID).Delete(&sastModel.Vulnerability{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Unscoped().Delete(&model.ScanTask{}, taskID).Error; err != nil {
+		if err := tx.Unscoped().Delete(&sastModel.ScanTask{}, taskID).Error; err != nil {
 			return err
 		}
 		return nil
 	})
 }
 
-func (s *ScanService) UpdateVulnStatus(vulnID, operatorID uint, req *model.UpdateVulnStatusRequest) error {
+func (s *ScanService) UpdateVulnStatus(vulnID, operatorID uint, req *sastModel.UpdateVulnStatusRequest) error {
 	vuln, err := s.GetVulnerability(vulnID)
 	if err != nil {
 		return err
@@ -238,8 +239,8 @@ func (s *ScanService) IsDuplicateTask(repoID uint, commitSHA string) bool {
 		return false
 	}
 	var count int64
-	s.db.Model(&model.ScanTask{}).
-		Where("repo_id = ? AND commit_sha = ? AND status IN ?", repoID, commitSHA, []string{model.TaskStatusPending, model.TaskStatusRunning}).
+	s.db.Model(&sastModel.ScanTask{}).
+		Where("repo_id = ? AND commit_sha = ? AND status IN ?", repoID, commitSHA, []string{sastModel.TaskStatusPending, sastModel.TaskStatusRunning}).
 		Count(&count)
 	return count > 0
 }
@@ -247,13 +248,13 @@ func (s *ScanService) IsDuplicateTask(repoID uint, commitSHA string) bool {
 func (s *ScanService) SaveScanResults(repoID, taskID uint, results []scanner.ParsedVulnerability) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		repoURL := ""
-		var repo model.Repository
+		var repo sastModel.Repository
 		if err := tx.Select("url").First(&repo, repoID).Error; err == nil {
 			repoURL = repo.URL
 		}
 
 		for _, p := range results {
-			vuln := &model.Vulnerability{
+			vuln := &sastModel.Vulnerability{
 				ScanTaskID:  taskID,
 				RepoID:      repoID,
 				RepoURL:     repoURL,
@@ -274,7 +275,7 @@ func (s *ScanService) SaveScanResults(repoID, taskID uint, results []scanner.Par
 					"rule_name":    p.RuleName,
 					"code_snippet": p.CodeSnippet,
 					"fingerprint":  p.Fingerprint,
-					"status":       model.VulnStatusNew,
+					"status":       sastModel.VulnStatusNew,
 				}).
 				FirstOrCreate(vuln)
 

@@ -36,7 +36,7 @@ scanner:
 dast:
   redis_dial_timeout: 5
   redis_read_timeout: 60
-  poc_dir: "./poc"
+  poc_dir: "./internal/dast/poc"
   default_ports: "top1000"
   queue_prefix: "scan"
   portscan_rate: 1000
@@ -44,6 +44,12 @@ dast:
   portscan_threads: 25
   portscan_type: "connect"
   console_log: true
+
+sca:
+  work_dir: "./internal/sca/sca_result"
+  osv_api_url: "https://api.osv.dev/v1/querybatch"
+  timeout_minutes: 15
+  max_concurrent: 2
 
 minio:
   endpoint: localhost:9000

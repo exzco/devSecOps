@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"devsecops/internal/model"
+	sastModel "devsecops/internal/sast/model"
 )
 
 type RepoService struct {
@@ -19,11 +20,11 @@ func NewRepoService(db *gorm.DB) *RepoService {
 	return &RepoService{db: db}
 }
 
-func (s *RepoService) Create(req *model.CreateRepoRequest) (*model.Repository, error) {
+func (s *RepoService) Create(req *sastModel.CreateRepoRequest) (*sastModel.Repository, error) {
 	if req.AutoScanEnabled {
 		return nil, fmt.Errorf("定时扫描功能已取消，暂不支持开启自动扫描")
 	}
-	repo := &model.Repository{
+	repo := &sastModel.Repository{
 		Name:            req.Name,
 		URL:             req.URL,
 		Branch:          req.Branch,
@@ -60,16 +61,16 @@ func (s *RepoService) Create(req *model.CreateRepoRequest) (*model.Repository, e
 	return repo, nil
 }
 
-func (s *RepoService) GetByID(id uint) (*model.Repository, error) {
-	var repo model.Repository
+func (s *RepoService) GetByID(id uint) (*sastModel.Repository, error) {
+	var repo sastModel.Repository
 	if err := s.db.First(&repo, id).Error; err != nil {
 		return nil, err
 	}
 	return &repo, nil
 }
 
-func (s *RepoService) GetByURL(url string) (*model.Repository, error) {
-	var repo model.Repository
+func (s *RepoService) GetByURL(url string) (*sastModel.Repository, error) {
+	var repo sastModel.Repository
 	err := s.db.Where("url = ?", strings.TrimSpace(url)).First(&repo).Error
 	if err != nil {
 		return nil, err
@@ -85,10 +86,10 @@ func (s *RepoService) List(page, perPage int) (*model.PaginatedResponse, error) 
 		perPage = 20
 	}
 
-	var repos []model.Repository
+	var repos []sastModel.Repository
 	var total int64
 
-	s.db.Model(&model.Repository{}).Count(&total)
+	s.db.Model(&sastModel.Repository{}).Count(&total)
 	offset := (page - 1) * perPage
 	if err := s.db.Order("id DESC").Offset(offset).Limit(perPage).Find(&repos).Error; err != nil {
 		return nil, err
@@ -103,7 +104,7 @@ func (s *RepoService) List(page, perPage int) (*model.PaginatedResponse, error) 
 	}, nil
 }
 
-func (s *RepoService) Update(id uint, req *model.UpdateRepoRequest) (*model.Repository, error) {
+func (s *RepoService) Update(id uint, req *sastModel.UpdateRepoRequest) (*sastModel.Repository, error) {
 	repo, err := s.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -158,13 +159,13 @@ func (s *RepoService) Update(id uint, req *model.UpdateRepoRequest) (*model.Repo
 
 func (s *RepoService) Delete(id uint) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("repo_id = ?", id).Delete(&model.Vulnerability{}).Error; err != nil {
+		if err := tx.Unscoped().Where("repo_id = ?", id).Delete(&sastModel.Vulnerability{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Unscoped().Where("repo_id = ?", id).Delete(&model.ScanTask{}).Error; err != nil {
+		if err := tx.Unscoped().Where("repo_id = ?", id).Delete(&sastModel.ScanTask{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Unscoped().Delete(&model.Repository{}, id).Error; err != nil {
+		if err := tx.Unscoped().Delete(&sastModel.Repository{}, id).Error; err != nil {
 			return err
 		}
 		return nil
@@ -177,13 +178,13 @@ func (s *RepoService) DeleteBatch(ids []uint) error {
 	}
 
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("repo_id IN ?", ids).Delete(&model.Vulnerability{}).Error; err != nil {
+		if err := tx.Unscoped().Where("repo_id IN ?", ids).Delete(&sastModel.Vulnerability{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Unscoped().Where("repo_id IN ?", ids).Delete(&model.ScanTask{}).Error; err != nil {
+		if err := tx.Unscoped().Where("repo_id IN ?", ids).Delete(&sastModel.ScanTask{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Unscoped().Where("id IN ?", ids).Delete(&model.Repository{}).Error; err != nil {
+		if err := tx.Unscoped().Where("id IN ?", ids).Delete(&sastModel.Repository{}).Error; err != nil {
 			return err
 		}
 		return nil

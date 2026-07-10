@@ -2,8 +2,10 @@ package engine
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"strings"
 	"time"
@@ -25,6 +27,66 @@ type ProbeResult struct {
 }
 
 var FallbackTags = []string{"exposure", "misconfig", "config"}
+
+var DefaultPortServices = map[int]string{
+	21:    "ftp",
+	22:    "ssh",
+	23:    "telnet",
+	25:    "smtp",
+	53:    "dns",
+	110:   "pop3",
+	143:   "imap",
+	445:   "smb",
+	873:   "rsync",
+	1433:  "mssql",
+	1521:  "oracle",
+	3306:  "mysql",
+	3389:  "rdp",
+	5432:  "postgresql",
+	6379:  "redis",
+	9200:  "elasticsearch",
+	11211: "memcached",
+	27017: "mongodb",
+}
+
+// ProbeHttpFallback checks if the open port responds to standard HTTP/HTTPS GET requests.
+func ProbeHttpFallback(ctx context.Context, host string, port int) (isHttp bool, isHttps bool) {
+	hostPort := fmt.Sprintf("%s:%d", host, port)
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   3 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	// 1. Try HTTPS
+	reqHttps, err := http.NewRequestWithContext(ctx, "GET", "https://"+hostPort, nil)
+	if err == nil {
+		resp, err := client.Do(reqHttps)
+		if err == nil {
+			resp.Body.Close()
+			return true, true
+		}
+	}
+
+	// 2. Try HTTP
+	reqHttp, err := http.NewRequestWithContext(ctx, "GET", "http://"+hostPort, nil)
+	if err == nil {
+		resp, err := client.Do(reqHttp)
+		if err == nil {
+			resp.Body.Close()
+			return true, false
+		}
+	}
+
+	return false, false
+}
+
 
 func normalizeTag(name string) string {
 	name = strings.ToLower(name)
@@ -125,12 +187,51 @@ func NmapProbe(ctx context.Context, host string, port int) (ProbeResult, error) 
 		return fxResult, nil
 	}
 
-	logger.Printf("[nmap-probe] %s → both nmap and fingerprintx failed. using fallback tags. err=%v\n", hostPort, fxErr)
+	logger.Printf("[nmap-probe] %s → both nmap and fingerprintx failed. Running custom fallback strategies...\n", hostPort)
+
+	// A. Try HTTP/HTTPS probe fallback (P0)
+	if isHttp, isHttps := ProbeHttpFallback(ctx, host, port); isHttp {
+		proto := "http"
+		url := "http://" + hostPort
+		tags := []string{"web", "http"}
+		if isHttps {
+			proto = "https"
+			url = "https://" + hostPort
+			tags = append(tags, "ssl", "https")
+		}
+		logger.Printf("[nmap-probe] %s → fallback resolved via HTTP Probe: proto=%s tags=%v\n", hostPort, proto, tags)
+		return ProbeResult{
+			URL:         url,
+			Proto:       proto,
+			Tags:        tags,
+			RawResponse: fmt.Sprintf("fallback_http_probe: is_https=%v", isHttps),
+			Service:     proto,
+		}, nil
+	}
+
+	// B. Try Port-to-Service heuristic mapping (P1)
+	if svcName, ok := DefaultPortServices[port]; ok {
+		logger.Printf("[nmap-probe] %s → fallback resolved via Port-to-Service heuristic mapping: service=%s\n", hostPort, svcName)
+		tags := []string{svcName}
+		if svcName == "mysql" || svcName == "redis" || svcName == "postgresql" || svcName == "mongodb" {
+			tags = append(tags, "database")
+		}
+		return ProbeResult{
+			URL:         hostPort,
+			Proto:       "tcp",
+			Tags:        tags,
+			RawResponse: fmt.Sprintf("fallback_port_mapping: inferred=%s", svcName),
+			Service:     svcName,
+		}, nil
+	}
+
+	// C. Generic TCP fallback (P2)
+	logger.Printf("[nmap-probe] %s → fallback resolved via Generic TCP fallback\n", hostPort)
 	return ProbeResult{
 		URL:         hostPort,
 		Proto:       "tcp",
-		Tags:        FallbackTags,
-		RawResponse: "nmap: no service detected; fingerprintx: " + fmt.Sprintf("%v", fxErr),
+		Tags:        []string{"network", "general-tcp"},
+		RawResponse: "nmap: no service detected; fingerprintx: " + fmt.Sprintf("%v", fxErr) + "; fallback: generic tcp",
 		Service:     "unknown",
 	}, nil
 }
@@ -181,7 +282,7 @@ func FingerprintxProbe(ctx context.Context, host string, port int) (ProbeResult,
 	svcName := strings.ToLower(fxOut.Protocol)
 	isTunnel := fxOut.TLS
 	proto, url := resolveProtoURL(svcName, isTunnel, hostPort)
-	
+
 	// 组装 tags 列表
 	tags := []string{svcName, "web"}
 	if isTunnel {

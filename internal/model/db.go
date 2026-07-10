@@ -24,11 +24,7 @@ func InitDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 
 	if err := db.AutoMigrate(
 		&User{},
-		&Repository{},
-		&ScanTask{},
-		&Vulnerability{},
 		&AuditLog{},
-		&PocTemplate{},
 	); err != nil {
 		return nil, err
 	}

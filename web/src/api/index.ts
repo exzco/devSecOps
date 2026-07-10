@@ -58,6 +58,7 @@ export const getScanTaskLogs = (taskId: number) =>
 
 export interface CreateDastPayload {
   task_id?: string;
+  task_name?: string;
   ips: string;
   ports?: string;
 }
@@ -83,10 +84,34 @@ export const stopDastTask = (taskId: string) =>
 export const getDastTaskAssets = (taskId: string) =>
   api.get(`/dast/scan/tasks/${taskId}/assets`);
 
+// ==================== DAST 扫描配置模板 APIs ====================
+
+export interface CreateConfigPayload {
+  config_id?: string;
+  task_name: string;
+  ips: string;
+  ports?: string;
+}
+
+export const getDastConfigs = () =>
+  api.get('/dast/scan/configs');
+
+export const createDastConfig = (payload: CreateConfigPayload) =>
+  api.post('/dast/scan/configs', payload);
+
+export const deleteDastConfig = (configId: string) =>
+  api.post(`/dast/scan/configs/delete/${configId}`);
+
+export const updateDastConfig = (configId: string, payload: CreateConfigPayload) =>
+  api.post(`/dast/scan/configs/update/${configId}`, payload);
+
 
 // ==================== DAST PoC APIs ====================
 export const getDastPocList = () =>
   api.get('/dast/pocs');
+
+export const getDastPoc = (id: string) =>
+  api.get(`/dast/pocs/${id}`);
 
 export const createDastPoc = (data: any) =>
   api.post('/dast/pocs', data);

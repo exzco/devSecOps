@@ -32,6 +32,9 @@
 
         <a-sub-menu key="sast" title="SAST 静态扫描">
           <template #icon><CodeOutlined /></template>
+          <a-menu-item key="SastRepos" @click="navigate('SastRepos')">
+            代码仓库
+          </a-menu-item>
           <a-menu-item key="SastScanConfig" @click="navigate('SastScanConfig')">
             Codeql 配置
           </a-menu-item>
@@ -125,6 +128,7 @@ watch(
 const currentRouteName = computed(() => {
   const map: Record<string, string> = {
     Dashboard: '概览',
+    SastRepos: '代码仓库',
     SastScanConfig: 'Codeql 配置',
     SastTasks: '任务列表',
     SastTaskDetail: '扫描详情与日志',

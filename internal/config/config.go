@@ -13,6 +13,7 @@ type Config struct {
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Scanner  ScannerConfig  `mapstructure:"scanner"`
 	Dast     DastConfig     `mapstructure:"dast"`
+	Sca      ScaConfig      `mapstructure:"sca"`
 	MinIO    MinIOConfig    `mapstructure:"minio"`
 	OpenAI   OpenAIConfig   `mapstructure:"openai"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
@@ -74,6 +75,13 @@ type DastConfig struct {
 	ConsoleLog       bool   `mapstructure:"console_log"`
 }
 
+type ScaConfig struct {
+	WorkDir        string `mapstructure:"work_dir"`
+	OSVApiURL      string `mapstructure:"osv_api_url"`
+	TimeoutMinutes int    `mapstructure:"timeout_minutes"`
+	MaxConcurrent  int    `mapstructure:"max_concurrent"`
+}
+
 type MinIOConfig struct {
 	Endpoint  string `mapstructure:"endpoint"`
 	AccessKey string `mapstructure:"access_key"`
@@ -110,7 +118,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Apply default values if empty
 	if cfg.Dast.PocDir == "" {
-		cfg.Dast.PocDir = "./poc"
+		cfg.Dast.PocDir = "./internal/dast/poc"
 	}
 	if cfg.Dast.DefaultPorts == "" {
 		cfg.Dast.DefaultPorts = "top1000"
@@ -129,6 +137,19 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.Dast.PortScanType == "" {
 		cfg.Dast.PortScanType = "connect"
+	}
+
+	if cfg.Sca.WorkDir == "" {
+		cfg.Sca.WorkDir = "./sca_result"
+	}
+	if cfg.Sca.OSVApiURL == "" {
+		cfg.Sca.OSVApiURL = "https://api.osv.dev/v1/querybatch"
+	}
+	if cfg.Sca.TimeoutMinutes == 0 {
+		cfg.Sca.TimeoutMinutes = 15
+	}
+	if cfg.Sca.MaxConcurrent == 0 {
+		cfg.Sca.MaxConcurrent = 2
 	}
 
 	GlobalConfig = &cfg

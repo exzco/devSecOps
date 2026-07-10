@@ -13,7 +13,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"devsecops/internal/model"
+	sastModel "devsecops/internal/sast/model"
 )
 
 const githubSearchAPI = "https://api.github.com/search/repositories"
@@ -25,8 +25,8 @@ type GitHubDiscoveryService struct {
 }
 
 type DiscoveryResult struct {
-	Imported []*model.Repository `json:"imported"`
-	Skipped  []string            `json:"skipped"`
+	Imported []*sastModel.Repository `json:"imported"`
+	Skipped  []string                `json:"skipped"`
 }
 
 func NewGitHubDiscoveryService(repoSvc *RepoService, scanSvc *ScanService) *GitHubDiscoveryService {
@@ -37,14 +37,14 @@ func NewGitHubDiscoveryService(repoSvc *RepoService, scanSvc *ScanService) *GitH
 	}
 }
 
-func (s *GitHubDiscoveryService) DiscoverAndCreate(ctx context.Context, req *model.DiscoverGithubReposRequest) (*DiscoveryResult, error) {
+func (s *GitHubDiscoveryService) DiscoverAndCreate(ctx context.Context, req *sastModel.DiscoverGithubReposRequest) (*DiscoveryResult, error) {
 	items, err := s.searchRepositories(ctx, req.Language, req.MinStars, req.MaxStars, req.Limit)
 	if err != nil {
 		return nil, err
 	}
 
 	result := &DiscoveryResult{
-		Imported: make([]*model.Repository, 0, len(items)),
+		Imported: make([]*sastModel.Repository, 0, len(items)),
 		Skipped:  make([]string, 0),
 	}
 
@@ -69,7 +69,7 @@ func (s *GitHubDiscoveryService) DiscoverAndCreate(ctx context.Context, req *mod
 			branch = "main"
 		}
 
-		createReq := &model.CreateRepoRequest{
+		createReq := &sastModel.CreateRepoRequest{
 			Name:            item.FullName,
 			URL:             item.CloneURL,
 			Branch:          branch,
@@ -86,7 +86,7 @@ func (s *GitHubDiscoveryService) DiscoverAndCreate(ctx context.Context, req *mod
 			continue
 		}
 
-		_, err = s.scanSvc.CreateTask(repo.ID, model.TriggerTypeManual, repo.Branch, repo.Language, req.QuerySuite, req.RuleProfile, "")
+		_, err = s.scanSvc.CreateTask(repo.ID, sastModel.TriggerTypeManual, repo.Branch, repo.Language, req.QuerySuite, req.RuleProfile, "")
 		if err != nil {
 			result.Skipped = append(result.Skipped, item.CloneURL+" (task create failed: "+err.Error()+")")
 			continue
@@ -98,7 +98,7 @@ func (s *GitHubDiscoveryService) DiscoverAndCreate(ctx context.Context, req *mod
 	return result, nil
 }
 
-func (s *GitHubDiscoveryService) searchRepositories(ctx context.Context, language string, minStars, maxStars, limit int) ([]model.GithubSearchItem, error) {
+func (s *GitHubDiscoveryService) searchRepositories(ctx context.Context, language string, minStars, maxStars, limit int) ([]sastModel.GithubSearchItem, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
@@ -146,7 +146,7 @@ func (s *GitHubDiscoveryService) searchRepositories(ctx context.Context, languag
 		return nil, fmt.Errorf("github search failed status=%d body=%s", resp.StatusCode, string(body))
 	}
 
-	var payload model.GithubSearchResponse
+	var payload sastModel.GithubSearchResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, err
 	}

@@ -22,12 +22,16 @@ func NewQueueKeys(prefix string) QueueKeys {
 	return QueueKeys{Prefix: prefix}
 }
 
-func (q QueueKeys) PortJobs() string                  { return q.Prefix + ":port:jobs" }
-func (q QueueKeys) FpJobs() string                    { return q.Prefix + ":fp:jobs" }
-func (q QueueKeys) PocJobs() string                   { return q.Prefix + ":poc:jobs" }
-func (q QueueKeys) StatusKey(taskId string) string    { return q.Prefix + ":status:" + taskId }
-func (q QueueKeys) ResultsKey(taskId string) string   { return q.Prefix + ":results:" + taskId }
-func (q QueueKeys) AssetsKey(taskId string) string    { return q.Prefix + ":assets:" + taskId }
+func (q QueueKeys) PortJobs() string                { return q.Prefix + ":port:jobs" }
+func (q QueueKeys) FpJobs() string                  { return q.Prefix + ":fp:jobs" }
+func (q QueueKeys) PocJobs() string                 { return q.Prefix + ":poc:jobs" }
+func (q QueueKeys) StatusKey(taskId string) string  { return q.Prefix + ":status:" + taskId }
+func (q QueueKeys) ResultsKey(taskId string) string { return q.Prefix + ":results:" + taskId }
+func (q QueueKeys) AssetsKey(taskId string) string  { return q.Prefix + ":assets:" + taskId }
+// ConfigKey 存储扫描任务模板（持久配置，与扫描执行记录互相独立）
+func (q QueueKeys) ConfigKey(configId string) string { return q.Prefix + ":config:" + configId }
+// AllConfigsKey 跟踪所有配置模板 ID 的 Redis Set
+func (q QueueKeys) AllConfigsKey() string { return q.Prefix + ":all_configs" }
 
 type QueueClient struct {
 	Rdb *redis.Client

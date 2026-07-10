@@ -94,13 +94,15 @@
           <a-input v-model:value="formState.description" placeholder="对该模板漏洞原理的简要描述" />
         </a-form-item>
 
-        <a-form-item v-if="!editingId" label="PoC 内容 (Nuclei YAML)" required>
-          <a-textarea
-            v-model:value="formState.content"
-            :rows="14"
-            class="font-mono text-xs bg-zinc-50"
-            placeholder="id: my-poc&#10;info:&#10;  name: My PoC&#10;  severity: info&#10;http:&#10;  - method: GET&#10;    path:&#10;      - '{{BaseURL}}/'&#10;    matchers:&#10;      - type: word&#10;        words:&#10;          - 'example'"
-          />
+        <a-form-item label="PoC 内容 (Nuclei YAML)" required>
+          <a-spin :spinning="contentLoading">
+            <a-textarea
+              v-model:value="formState.content"
+              :rows="14"
+              class="font-mono text-xs bg-zinc-50"
+              placeholder="id: my-poc&#10;info:&#10;  name: My PoC&#10;  severity: info&#10;http:&#10;  - method: GET&#10;    path:&#10;      - '{{BaseURL}}/'&#10;    matchers:&#10;      - type: word&#10;        words:&#10;          - 'example'"
+            />
+          </a-spin>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -110,7 +112,7 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue';
 import { message } from 'ant-design-vue';
-import { getDastPocList, createDastPoc, updateDastPoc, deleteDastPoc } from '../../api';
+import { getDastPocList, getDastPoc, createDastPoc, updateDastPoc, deleteDastPoc } from '../../api';
 
 interface PocRecord {
   id: string;
@@ -128,6 +130,7 @@ const saveLoading = ref(false);
 const pocData = ref<PocRecord[]>([]);
 const modalVisible = ref(false);
 const editingId = ref('');
+const contentLoading = ref(false);
 
 const formState = reactive({
   name: '',
@@ -175,7 +178,7 @@ const showCreateModal = () => {
   modalVisible.value = true;
 };
 
-const showEditModal = (record: PocRecord) => {
+const showEditModal = async (record: PocRecord) => {
   editingId.value = record.id;
   Object.assign(formState, {
     name: record.name,
@@ -185,22 +188,34 @@ const showEditModal = (record: PocRecord) => {
     content: '',
   });
   modalVisible.value = true;
+  contentLoading.value = true;
+  try {
+    const res = await getDastPoc(record.id);
+    if (editingId.value === record.id) {
+      formState.content = res.data.data.content || '';
+    }
+  } catch {
+    message.error('获取 PoC 详细内容失败');
+  } finally {
+    contentLoading.value = false;
+  }
 };
 
 const handleSave = async () => {
+  if (!formState.name.trim()) { message.error('模板名称不能为空'); return; }
+  if (!formState.content.trim()) { message.error('模板内容不能为空'); return; }
   saveLoading.value = true;
   try {
     if (editingId.value) {
       await updateDastPoc(editingId.value, {
-        name: formState.name,
-        description: formState.description,
+        name: formState.name.trim(),
+        description: formState.description.trim(),
         severity: formState.severity,
         tags: parseTags(formState.tagsRaw),
+        content: formState.content,
       });
-      message.success('模板信息已更新');
+      message.success('模板已更新');
     } else {
-      if (!formState.name.trim()) { message.error('模板名称不能为空'); return; }
-      if (!formState.content.trim()) { message.error('模板内容不能为空'); return; }
       await createDastPoc({
         name: formState.name.trim(),
         description: formState.description.trim(),

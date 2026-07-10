@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 
-	"devsecops/internal/model"
+	"devsecops/internal/sast/model"
 	"devsecops/internal/sast/scanner"
 	"devsecops/internal/sast/scheduler"
 	"devsecops/internal/sast/service"

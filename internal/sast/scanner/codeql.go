@@ -43,7 +43,14 @@ func (g *GitManager) CloneRepo(ctx context.Context, repoURL, branch, taskID stri
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git clone failed: %w, output: %s", err, string(output))
+		errMsg := string(output)
+		// 给出更友好的提示：认证失败时提醒用户配置 Token
+		if strings.Contains(errMsg, "terminal prompts disabled") ||
+			strings.Contains(errMsg, "could not read Username") ||
+			strings.Contains(errMsg, "Authentication failed") {
+			return "", fmt.Errorf("仓库认证失败：无法访问 %s\n如果是私有仓库，请在仓库配置中将 Auth Type 设为 token 并填入有效的 Personal Access Token\n原始错误: %s", repoURL, errMsg)
+		}
+		return "", fmt.Errorf("git clone failed: %w, output: %s", err, errMsg)
 	}
 
 	return destDir, nil
@@ -168,7 +175,7 @@ func (c *CodeQLRunner) generateDynamicQLS(targets []string, rules string) string
 		if rule == "" {
 			continue
 		}
-		
+
 		normalized := strings.ToLower(rule)
 		normalized = strings.ReplaceAll(normalized, "_", "-")
 		if !strings.HasPrefix(normalized, "cwe-") {

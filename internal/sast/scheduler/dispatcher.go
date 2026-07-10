@@ -14,7 +14,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
-	"devsecops/internal/model"
+	"devsecops/internal/sast/model"
 	"devsecops/internal/sast/scanner"
 )
 

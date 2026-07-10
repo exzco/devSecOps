@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	pocBucket    = "dast-pocs"
-	pocIndexKey  = "poc_index.json"
-	localPocDir  = "./poc"
+	pocBucket   = "dast-pocs"
+	pocIndexKey = "poc_index.json"
+	localPocDir = "./internal/dast/poc"
 )
 
 type PocMeta struct {
@@ -246,7 +246,7 @@ func (s *PocService) CreatePoc(ctx context.Context, name, description, severity 
 }
 
 // UpdatePoc 更新 PoC 元数据
-func (s *PocService) UpdatePoc(ctx context.Context, id, name, description, severity string, tags []string) (*PocMeta, error) {
+func (s *PocService) UpdatePoc(ctx context.Context, id, name, description, severity string, tags []string, content string) (*PocMeta, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -262,6 +262,17 @@ func (s *PocService) UpdatePoc(ctx context.Context, id, name, description, sever
 			list[i].Severity = severity
 			list[i].Tags = tags
 			list[i].UpdatedAt = time.Now().Format(time.RFC3339)
+
+			if content != "" {
+				dataBytes := []byte(content)
+				_, err := s.minioClient.PutObject(ctx, s.bucketName, m.FilePath, bytes.NewReader(dataBytes), int64(len(dataBytes)), minio.PutObjectOptions{
+					ContentType: "application/x-yaml",
+				})
+				if err != nil {
+					return nil, fmt.Errorf("更新 MinIO 中的 PoC 文件失败: %w", err)
+				}
+			}
+
 			if err := s.writeIndexToMinio(ctx, list); err != nil {
 				return nil, err
 			}
@@ -269,6 +280,41 @@ func (s *PocService) UpdatePoc(ctx context.Context, id, name, description, sever
 		}
 	}
 	return nil, fmt.Errorf("PoC 模板 %s 不存在", id)
+}
+
+// GetPocContent 获取 PoC YAML 文件的具体内容
+func (s *PocService) GetPocContent(ctx context.Context, id string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	list, err := s.readIndexFromMinio(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	var filePath string
+	for _, m := range list {
+		if m.ID == id {
+			filePath = m.FilePath
+			break
+		}
+	}
+	if filePath == "" {
+		return "", fmt.Errorf("PoC 模板 %s 不存在", id)
+	}
+
+	obj, err := s.minioClient.GetObject(ctx, s.bucketName, filePath, minio.GetObjectOptions{})
+	if err != nil {
+		return "", fmt.Errorf("从 MinIO 获取 PoC 文件失败: %w", err)
+	}
+	defer obj.Close()
+
+	data, err := io.ReadAll(obj)
+	if err != nil {
+		return "", fmt.Errorf("读取 PoC 文件失败: %w", err)
+	}
+
+	return string(data), nil
 }
 
 // DeletePoc 删除 PoC 模板
@@ -373,4 +419,3 @@ func hasIntersection(a, b []string) bool {
 	}
 	return false
 }
-

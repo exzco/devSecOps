@@ -14,9 +14,9 @@ import (
 
 	"devsecops/internal/config"
 	"devsecops/internal/dast/logger"
+	"devsecops/internal/dast/model"
 	"devsecops/internal/dast/queue"
 	"devsecops/internal/dast/service"
-	"devsecops/internal/model"
 )
 
 var (
@@ -287,7 +287,8 @@ func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient
 		logger.Printf("[fp-worker] done host=%s:%d → target=%s tags=%v, cost=%s\n",
 			job.Host, job.Port, result.URL, result.Tags, duration)
 
-		isFallback := len(result.Tags) == 3 && result.Tags[0] == "exposure" && result.Tags[1] == "misconfig" && result.Tags[2] == "config"
+		isFallback := (len(result.Tags) == 3 && result.Tags[0] == "exposure" && result.Tags[1] == "misconfig" && result.Tags[2] == "config") ||
+			(len(result.Tags) == 2 && result.Tags[0] == "network" && result.Tags[1] == "general-tcp")
 		if isFallback {
 			saveResult(job.TaskId, "fingerprint", struct {
 				Host     string   `json:"host"`
@@ -360,6 +361,7 @@ func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClien
 		if downloadErr != nil {
 			logger.Printf("[poc-worker] 从 MinIO 匹配下载 PoC 失败 target=%s: %v\n", job.Target, downloadErr)
 			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
+			checkTaskCompletion(ctx, rdb, keys, job.TaskId)
 			continue
 		}
 
@@ -367,6 +369,7 @@ func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClien
 		if tempPocDir == "" {
 			logger.Printf("[poc-worker] 未匹配到 target=%s 标签 %v 的任何 PoC 模板，跳过检测\n", job.Target, job.Tags)
 			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
+			checkTaskCompletion(ctx, rdb, keys, job.TaskId)
 			continue
 		}
 

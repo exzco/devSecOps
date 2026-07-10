@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"devsecops/internal/model"
+	"devsecops/internal/sast/model"
 	"devsecops/internal/sast/service"
 )
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"devsecops/internal/config"
-	"devsecops/internal/model"
+	"devsecops/internal/sast/model"
 )
 
 type ScanWorker struct {

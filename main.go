@@ -16,13 +16,16 @@ import (
 	"devsecops/internal/config"
 	dastEngine "devsecops/internal/dast/engine"
 	dastHandler "devsecops/internal/dast/handler"
+	dastModel "devsecops/internal/dast/model"
 	dastService "devsecops/internal/dast/service"
 	"devsecops/internal/model"
 	"devsecops/internal/preflight"
 	sastHandler "devsecops/internal/sast/handler"
+	sastModel "devsecops/internal/sast/model"
 	sastScanner "devsecops/internal/sast/scanner"
 	sastScheduler "devsecops/internal/sast/scheduler"
 	sastService "devsecops/internal/sast/service"
+	scaModel "devsecops/internal/sca/model"
 )
 
 func main() {
@@ -45,10 +48,34 @@ func main() {
 	}
 	log.Println("[Init] Database connected and migrated")
 
+	// Migrate domain-specific tables to break circular imports in internal/model package
+	if err := db.AutoMigrate(
+		&sastModel.Repository{},
+		&sastModel.ScanTask{},
+		&sastModel.Vulnerability{},
+		&dastModel.PocTemplate{},
+		&scaModel.ScaProject{},
+		&scaModel.ScaScanTask{},
+		&scaModel.ScaDependency{},
+		&scaModel.ScaVulnerability{},
+		&scaModel.ScaOsvVulnerability{},
+	); err != nil {
+		panic("failed to migrate domain models: " + err.Error())
+	}
+
 	//实例化 SAST 服务与 Worker
 	scanWorker := sastScanner.NewScanWorker(&cfg.Scanner)
 	sastRepoSvc := sastService.NewRepoService(db)
 	sastScanSvc := sastService.NewScanService(db, scanWorker)
+
+	// Break circular dependency between service and scheduler by setting callback
+	sastService.ActiveTaskCanceler = func(taskID uint) {
+		sastScheduler.ActiveTasksMu.Lock()
+		if cancel, exists := sastScheduler.ActiveTasks[taskID]; exists {
+			cancel()
+		}
+		sastScheduler.ActiveTasksMu.Unlock()
+	}
 
 	//  启动 Asynq 队列 Worker，负责 SAST 代码扫描
 	asynqClient := sastScheduler.NewClient(&cfg.Redis)
@@ -107,14 +134,21 @@ func main() {
 		v1.POST("/dast/scan/tasks/delete/:id", dastCtrlHandler.DeleteTask)
 		v1.POST("/dast/scan/tasks/stop/:id", dastCtrlHandler.StopTask)
 
+		// DAST 扫描配置模板路由（持久化，与扫描执行记录互不干扰）
+		v1.GET("/dast/scan/configs", dastCtrlHandler.ListConfigs)
+		v1.POST("/dast/scan/configs", dastCtrlHandler.CreateConfig)
+		v1.POST("/dast/scan/configs/update/:id", dastCtrlHandler.UpdateConfig)
+		v1.POST("/dast/scan/configs/delete/:id", dastCtrlHandler.DeleteConfig)
+
 		// DAST PoC 路由
 		v1.POST("/dast/pocs", pocHandler.CreatePoc)
 		v1.GET("/dast/pocs", pocHandler.ListPocs)
+		v1.GET("/dast/pocs/:id", pocHandler.GetPoc)
 		v1.POST("/dast/pocs/update/:id", pocHandler.UpdatePoc)
 		v1.POST("/dast/pocs/delete/:id", pocHandler.DeletePoc)
 	}
 
-	// 静态前端资源挂载 
+	// 静态前端资源挂载
 	r.Static("/assets", "./web/dist/assets")
 	r.StaticFile("/favicon.svg", "./web/dist/favicon.svg")
 	r.StaticFile("/icons.svg", "./web/dist/icons.svg")
