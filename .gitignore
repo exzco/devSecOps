@@ -1,6 +1,10 @@
-/result/
+internal/sast/result/
+internal/dast/log/
 .env
 *.exe
 /web/node_modules/
 devsecops
 /web/dist/
+/frontend.md
+/notice.
+

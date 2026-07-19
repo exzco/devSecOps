@@ -512,10 +512,12 @@ const codeLines = computed(() => {
 
 const snippetStartLine = computed(() => {
   if (activeStep.value) {
-    return activeStep.value.start_line;
+    // worker.go 从 stepStart - 15 开始取
+    return Math.max(1, activeStep.value.start_line - 15);
   }
   if (activeVuln.value) {
-    return Math.max(1, activeVuln.value.start_line - 4);
+    // worker.go 从 startLine - 15 开始取
+    return Math.max(1, activeVuln.value.start_line - 15);
   }
   return 1;
 });

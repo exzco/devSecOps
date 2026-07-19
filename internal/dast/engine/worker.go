@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -215,42 +214,44 @@ func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient
 		logger.Printf("[fp-worker] probing taskId=%s host=%s port=%d\n", job.TaskId, job.Host, job.Port)
 
 		startTime := time.Now()
-		result, err := NmapProbe(ctx, job.Host, job.Port)
-		duration := time.Since(startTime)
-		if err != nil {
-			isTimeout := strings.Contains(err.Error(), "timed out") || strings.Contains(err.Error(), "deadline exceeded")
-			if isTimeout {
-				logger.Printf("[fp-worker] nmap-probe timed out on %s:%d. Skipping retry. cost=%s\n", job.Host, job.Port, duration)
-				result = ProbeResult{
-					URL:         fmt.Sprintf("%s:%d", job.Host, job.Port),
-					Proto:       "tcp",
-					Tags:        FallbackTags,
-					RawResponse: fmt.Sprintf("nmap probe timed out: %v", err),
-				}
-			} else {
-				if job.Retry < 3 {
-					job.Retry++
-					job.FailReason = fmt.Sprintf("retry %d/3: %v", job.Retry, err)
-					data, _ := json.Marshal(job)
-					_ = rdb.Push(ctx, keys.FpJobs(), string(data))
-					logger.Printf("[fp-worker] nmap-probe error on %s:%d, retrying (%d/3): %v, cost=%s\n", job.Host, job.Port, job.Retry, err, duration)
-					continue
-				}
-				logger.Printf("[fp-worker] nmap-probe error on %s:%d, max retries reached: %v. falling back. cost=%s\n", job.Host, job.Port, err, duration)
-				result = ProbeResult{
-					URL:         fmt.Sprintf("%s:%d", job.Host, job.Port),
-					Proto:       "tcp",
-					Tags:        FallbackTags,
-					RawResponse: fmt.Sprintf("nmap probe failed: %v", err),
-				}
+
+		// ── Step 1: 协议嗅探分流 ─────────────────────────────────────────────
+		isWeb, isTLS := SniffAndRoute(ctx, job.Host, job.Port)
+
+		var result ProbeResult
+		var fpErr error
+
+		if isWeb {
+			// ── Step 2a: Web 流 → httpx 风格采集 + wappalyzergo 识别 ────────
+			result, fpErr = WebFingerprint(ctx, job.Host, job.Port, isTLS)
+			if fpErr != nil || len(result.Tags) == 0 {
+				logger.Printf("[fp-worker] WebFingerprint insufficient on %s:%d (err=%v), switching to ActiveProbe\n",
+					job.Host, job.Port, fpErr)
+				// ── Step 3a: CDN/无特征 → 主动试探 + HTTP 降级盲测 ──────────
+				result, _ = ActiveProbe(ctx, job.Host, job.Port)
+				_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_active_probe", 1)
 			}
 		} else {
-			if len(result.Tags) == 0 {
-				result.Tags = FallbackTags
-				logger.Printf("[fp-worker] no fingerprint matched for %s:%d (proto=%s), using fallback tags\n",
-					job.Host, job.Port, result.Proto)
-				_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_fallback", 1)
+			// ── Step 2b: 二进制服务流 → 精准 Nmap 指纹（无退化链）──────────
+			result, fpErr = NmapBinaryProbe(ctx, job.Host, job.Port)
+			if fpErr != nil || result.Service == "" {
+				logger.Printf("[fp-worker] NmapBinaryProbe failed on %s:%d (err=%v), switching to ActiveProbe\n",
+					job.Host, job.Port, fpErr)
+				// ── Step 3b: Nmap 无结果 → 主动试探兜底 ────────────────────
+				result, _ = ActiveProbe(ctx, job.Host, job.Port)
+				_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_active_probe", 1)
 			}
+		}
+
+		duration := time.Since(startTime)
+
+		// 最终 tags 为空时使用全局兜底（极少触发）
+		if len(result.Tags) == 0 {
+			result.Tags = FallbackTags
+			result.Source = "fallback"
+			logger.Printf("[fp-worker] all probes returned empty tags for %s:%d, using global fallback\n",
+				job.Host, job.Port)
+			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_fallback", 1)
 		}
 
 		pocJob := model.PocJob{
@@ -284,36 +285,40 @@ func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient
 
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_done", 1)
 		checkTaskCompletion(ctx, rdb, keys, job.TaskId)
-		logger.Printf("[fp-worker] done host=%s:%d → target=%s tags=%v, cost=%s\n",
-			job.Host, job.Port, result.URL, result.Tags, duration)
+		logger.Printf("[fp-worker] done host=%s:%d → target=%s source=%s tags=%v, cost=%s\n",
+			job.Host, job.Port, result.URL, result.Source, result.Tags, duration)
 
-		isFallback := (len(result.Tags) == 3 && result.Tags[0] == "exposure" && result.Tags[1] == "misconfig" && result.Tags[2] == "config") ||
-			(len(result.Tags) == 2 && result.Tags[0] == "network" && result.Tags[1] == "general-tcp")
+		// 使用 Source 字段判断指纹质量，active_probe/fallback 时记录原始响应辅助排查
+		isFallback := result.Source == "active_probe" || result.Source == "fallback"
 		if isFallback {
 			saveResult(job.TaskId, "fingerprint", struct {
 				Host     string   `json:"host"`
 				Port     int      `json:"port"`
 				Proto    string   `json:"proto"`
+				Source   string   `json:"source"`
 				Tags     []string `json:"tags"`
 				Response string   `json:"response"`
 			}{
 				Host:     job.Host,
 				Port:     job.Port,
 				Proto:    result.Proto,
+				Source:   result.Source,
 				Tags:     result.Tags,
 				Response: result.RawResponse,
 			})
 		} else {
 			saveResult(job.TaskId, "fingerprint", struct {
-				Host  string   `json:"host"`
-				Port  int      `json:"port"`
-				Proto string   `json:"proto"`
-				Tags  []string `json:"tags"`
+				Host   string   `json:"host"`
+				Port   int      `json:"port"`
+				Proto  string   `json:"proto"`
+				Source string   `json:"source"`
+				Tags   []string `json:"tags"`
 			}{
-				Host:  job.Host,
-				Port:  job.Port,
-				Proto: result.Proto,
-				Tags:  result.Tags,
+				Host:   job.Host,
+				Port:   job.Port,
+				Proto:  result.Proto,
+				Source: result.Source,
+				Tags:   result.Tags,
 			})
 		}
 	}

@@ -18,7 +18,7 @@ redis:
 scanner:
   codeql_path: "D:/web/codeql-cli/codeql.exe" # CodeQL CLI 路径
   codeql_queries: "D:/web/codeql-codeql-cli-v2.25.6" # CodeQL 查询库路径
-  work_dir: "./result" # 扫描工作目录
+  work_dir: "./sast/result" # 扫描工作目录
   max_concurrent: 2 # 最大并发扫描数
   timeout_minutes: 30 # 单次扫描最长时间    
   default_profile: baseline

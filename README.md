@@ -1,6 +1,7 @@
-# DevSecOps 
+# DevSecOps
 
 本平台是一个集成了 **SAST** 与 **DAST** 的 DevSecOps 平台。
+
 ## 一、环境部署指南
 
 ### 1. 基础依赖项
@@ -39,10 +40,11 @@ docker run --name minio-devsecops -p 9000:9000 -p 9001:9001 -e MINIO_ROOT_USER=m
 ## 二、快速启动指南
 
 ```bash
-go mod tidy 
+go mod tidy
 cd web && npm run build
 go build -o devsecops main.go
 ```
+
 ---
 
 ## 三、核心 API 详解

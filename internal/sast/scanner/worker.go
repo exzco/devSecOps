@@ -94,7 +94,7 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 		// 2. 污点追踪链路步骤代码片段
 		for j := range vulns[i].DataFlow {
 			for k := range vulns[i].DataFlow[j] {
-				stepStart := vulns[i].DataFlow[j][k].StartLine
+				stepStart := vulns[i].DataFlow[j][k].StartLine - 15
 				if stepStart < 1 {
 					stepStart = 1
 				}
