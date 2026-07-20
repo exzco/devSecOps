@@ -8,3 +8,5 @@ devsecops
 /frontend.md
 /notice.
 /configs/config.local.yaml
+/internal/sast/log/
+/log/dast_log.json
