@@ -26,16 +26,17 @@ func (s *ScanService) GetDB() *gorm.DB {
 	return s.db
 }
 
-func (s *ScanService) CreateTask(repoID uint, triggerType, branch, language, querySuite, ruleProfile, rules string) (*sastModel.ScanTask, error) {
+func (s *ScanService) CreateTask(repoID uint, triggerType, branch, language, querySuite, ruleProfile, rules string, useAIVerification bool) (*sastModel.ScanTask, error) {
 	task := &sastModel.ScanTask{
-		RepoID:      repoID,
-		TriggerType: triggerType,
-		Branch:      branch,
-		Language:    language,
-		QuerySuite:  querySuite,
-		RuleProfile: ruleProfile,
-		Rules:       rules,
-		Status:      sastModel.TaskStatusPending,
+		RepoID:            repoID,
+		TriggerType:       triggerType,
+		Branch:            branch,
+		Language:          language,
+		QuerySuite:        querySuite,
+		RuleProfile:       ruleProfile,
+		Rules:             rules,
+		UseAIVerification: useAIVerification,
+		Status:            sastModel.TaskStatusPending,
 	}
 
 	if err := s.db.Create(task).Error; err != nil {

@@ -44,6 +44,13 @@
             </div>
           </a-form-item>
 
+          <a-form-item label="测试选项">
+            <div class="flex items-center">
+              <a-switch v-model:checked="scanForm.enableAi" />
+              <span class="ml-3 text-sm text-zinc-600">AI 验证</span>
+            </div>
+          </a-form-item>
+
           <div class="pt-4 border-t border-zinc-100 flex items-center justify-between">
             <span class="text-xs text-zinc-400 font-medium">提示：配置完成后点击 Start Scan 将提交并跳转至扫描任务列表</span>
             <a-button type="primary" :loading="submitLoading" class="!bg-zinc-950 !border-zinc-950 !text-white hover:!bg-zinc-800" @click="handleStartScan">
@@ -129,6 +136,7 @@ const handleStartScan = async () => {
       language: scanForm.language,
       rule_profile: 'baseline',
       rules: selectedRules,
+      use_ai_verification: scanForm.enableAi,
     });
 
     message.success('静态审计扫描任务已提交执行');

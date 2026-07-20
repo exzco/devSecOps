@@ -1,6 +1,6 @@
 server:
   port: 22211
-  mode: debug  # debug / release
+  mode: debug # debug / release
 
 database:
   host: localhost
@@ -12,15 +12,15 @@ database:
 
 redis:
   addr: localhost:6379
-  password: 
+  password:
   db: 10
 
 scanner:
   codeql_path: "D:/web/codeql-cli/codeql.exe" # CodeQL CLI 路径
   codeql_queries: "D:/web/codeql-codeql-cli-v2.25.6" # CodeQL 查询库路径
-  work_dir: "./sast/result" # 扫描工作目录
+  work_dir: "./internal/sast/result" # 扫描工作目录
   max_concurrent: 2 # 最大并发扫描数
-  timeout_minutes: 30 # 单次扫描最长时间    
+  timeout_minutes: 30 # 单次扫描最长时间
   default_profile: baseline
   rule_profiles:
     baseline:
@@ -61,3 +61,9 @@ minio:
 jwt:
   secret: "secret_key_wsh_loaeriver" # 密钥
   expire_hours: 72
+
+openai:
+  api_key: "sk-060d9ac58b584a2eadaf159197b75029"
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-v4-pro"
+

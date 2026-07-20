@@ -7,4 +7,4 @@ devsecops
 /web/dist/
 /frontend.md
 /notice.
-
+/configs/config.local.yaml

@@ -55,7 +55,7 @@ func (m *CronManager) Start() {
 				continue
 			}
 
-			task, err := m.scanSvc.CreateTask(repo.ID, sastModel.TriggerTypeCron, repo.Branch, repo.Language, "", "", "")
+			task, err := m.scanSvc.CreateTask(repo.ID, sastModel.TriggerTypeCron, repo.Branch, repo.Language, "", "", "", false)
 			if err != nil {
 				log.Printf("[Cron] Failed to create scan task for repo %s: %v", repo.Name, err)
 				continue

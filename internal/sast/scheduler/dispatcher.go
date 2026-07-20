@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"devsecops/internal/agent"
+	"devsecops/internal/config"
 	"devsecops/internal/sast/model"
 	"devsecops/internal/sast/scanner"
 )
@@ -138,6 +141,11 @@ func (d *TaskDispatcher) handleScanRepo(ctx context.Context, t *asynq.Task) erro
 	})
 	d.appendTaskLog(payload.TaskID, fmt.Sprintf("任务执行成功，耗时 %dms", duration))
 
+	if task.UseAIVerification {
+		d.appendTaskLog(payload.TaskID, "配置了 AI 语义分析，即将触发 LLM 误报研判与修复建议生成 (后台执行)...")
+		go d.triggerAIAudit(payload.TaskID, task.Language, repo.URL, "项目来源: " + repo.URL)
+	}
+
 	log.Printf("[Asynq] 任务 %d 完成，耗时 %dms", payload.TaskID, duration)
 	return nil
 }
@@ -181,4 +189,66 @@ func (d *TaskDispatcher) saveResults(repoID, taskID uint, repoURL string, result
 			}).
 			FirstOrCreate(vuln)
 	}
+}
+
+func (d *TaskDispatcher) triggerAIAudit(taskID uint, language, repoURL, projectDesc string) {
+	var vulns []model.Vulnerability
+	if err := d.db.Where("scan_task_id = ?", taskID).Find(&vulns).Error; err != nil {
+		log.Printf("[AI-Audit] Failed to fetch vulnerabilities for task %d: %v", taskID, err)
+		return
+	}
+
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	baseURL := ""
+	modelName := ""
+	if config.GlobalConfig != nil && config.GlobalConfig.OpenAI.APIKey != "" {
+		apiKey = config.GlobalConfig.OpenAI.APIKey
+		baseURL = config.GlobalConfig.OpenAI.BaseURL
+		modelName = config.GlobalConfig.OpenAI.Model
+	}
+
+	if apiKey == "" {
+		log.Printf("[AI-Audit] DEEPSEEK_API_KEY not set, skipping AI semantic analysis for task %d", taskID)
+		d.appendTaskLog(taskID, "跳过 AI 分析：未配置 DEEPSEEK_API_KEY 环境变量或配置文件 api_key")
+		return
+	}
+
+	d.appendTaskLog(taskID, fmt.Sprintf("[AI-Audit] 开始触发 LLM 语义研判与误报分析，共分析 %d 条漏洞...", len(vulns)))
+
+	auditor := agent.NewAppSecAuditor(agent.AuditorConfig{
+		APIKey:  apiKey,
+		BaseURL: baseURL,
+		Model:   modelName,
+	})
+	ctx := context.Background()
+
+	logFn := func(msg string) {
+		log.Println(msg)
+		d.appendTaskLog(taskID, msg)
+	}
+
+	successCount := 0
+	for _, vuln := range vulns {
+		codeCtx := fmt.Sprintf("Rule: %s\nFile: %s:%d\nSnippet:\n%s", vuln.RuleID, vuln.FilePath, vuln.StartLine, vuln.CodeSnippet)
+		
+		result, err := auditor.AnalyzeVulnerabilityWithLogger(ctx, vuln.RuleName, language, projectDesc, codeCtx, logFn)
+		if err != nil {
+			log.Printf("[AI-Audit] Failed for vuln %d: %v", vuln.ID, err)
+			continue
+		}
+
+		resultJSON, _ := json.Marshal(result)
+		updates := map[string]interface{}{
+			"ai_result": datatypes.JSON(resultJSON),
+			"status":    model.VulnStatusAITriaged,
+		}
+		if result.IsFalsePositive {
+			updates["status"] = model.VulnStatusFalsePositive
+		}
+
+		d.db.Model(&vuln).Updates(updates)
+		successCount++
+	}
+
+	d.appendTaskLog(taskID, fmt.Sprintf("[AI-Audit] LLM 语义分析阶段完成，共处理 %d 个漏洞，成功分析 %d 个", len(vulns), successCount))
 }

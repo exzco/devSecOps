@@ -1,6 +1,6 @@
 <template>
-  <div class="h-full w-full mx-auto max-w-screen-2xl flex flex-col gap-5 overflow-hidden">
-    <a-card title="代码仓库管理" :bordered="false" class="rounded-lg flex flex-col w-full h-full flex-shrink-0">
+  <div class="w-full mx-auto max-w-screen-2xl flex flex-col gap-5 bg-white">
+    <a-card title="代码仓库管理" :bordered="false" class="rounded-lg w-full border border-zinc-200 bg-white">
       <template #extra>
         <a-space>
           <a-popconfirm
@@ -21,18 +21,18 @@
         </a-space>
       </template>
 
-      <div class="flex-1 overflow-hidden h-full mt-4">
+      <div class="mt-2 bg-white">
         <a-table
           row-key="id"
           :columns="columns"
           :data-source="data"
           :row-selection="{ selectedRowKeys: selectedRowKeys, onChange: onSelectChange }"
-          :scroll="{ x: '100%', y: '100%' }"
+          :scroll="{ x: 'max-content' }"
           size="middle"
           :loading="loading"
           :pagination="pagination"
           @change="handleTableChange"
-          class="h-full w-full"
+          class="w-full bg-white"
         >
           <template #bodyCell="{ text, record, column }">
             <template v-if="column.dataIndex === 'language'">
@@ -136,6 +136,10 @@
           <a-form-item label="额外规则">
             <a-input v-model:value="scanForm.query_suite" :maxlength="512" placeholder="支持逗号分隔多个 .ql/.qls" />
           </a-form-item>
+          <a-form-item label="验证 (AI)">
+            <a-switch v-model:checked="scanForm.use_ai_verification" />
+            <span class="ml-2 text-zinc-500 text-xs">启动后将自动调用大语言模型对漏洞生成测试代码并创建本地靶机环境复现。</span>
+          </a-form-item>
         </a-form>
       </div>
     </a-modal>
@@ -188,6 +192,7 @@ interface RepoForm {
 interface ScanForm {
   rule_profile: RuleProfile;
   query_suite: string;
+  use_ai_verification: boolean;
 }
 
 const BRANCH_REGEX = /^[A-Za-z0-9._/-]{1,128}$/;
@@ -270,6 +275,7 @@ const scanTarget = ref<RepoRecord | null>(null);
 const scanForm = reactive<ScanForm>({
   rule_profile: 'baseline',
   query_suite: '',
+  use_ai_verification: false,
 });
 
 const loadData = async () => {
@@ -395,6 +401,7 @@ const handleScan = (record: RepoRecord) => {
   scanTarget.value = record;
   scanForm.query_suite = '';
   scanForm.rule_profile = 'baseline';
+  scanForm.use_ai_verification = false;
   scanVisible.value = true;
 };
 
@@ -414,6 +421,7 @@ const handleConfirmScan = async () => {
       branch: scanTarget.value.branch,
       rule_profile: scanForm.rule_profile || undefined,
       query_suite: normalizedQuerySuite || undefined,
+      use_ai_verification: scanForm.use_ai_verification,
     });
     scanVisible.value = false;
     message.success(`已触发扫描：${scanTarget.value.name}`);

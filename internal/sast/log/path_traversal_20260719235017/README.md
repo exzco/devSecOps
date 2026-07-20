@@ -1,0 +1,3 @@
+# Path Traversal Vulnerability Test
+## Environment Setup
+Running docker compose up -d...

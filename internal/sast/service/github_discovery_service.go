@@ -86,7 +86,7 @@ func (s *GitHubDiscoveryService) DiscoverAndCreate(ctx context.Context, req *sas
 			continue
 		}
 
-		_, err = s.scanSvc.CreateTask(repo.ID, sastModel.TriggerTypeManual, repo.Branch, repo.Language, req.QuerySuite, req.RuleProfile, "")
+		_, err = s.scanSvc.CreateTask(repo.ID, sastModel.TriggerTypeManual, repo.Branch, repo.Language, req.QuerySuite, req.RuleProfile, "", false)
 		if err != nil {
 			result.Skipped = append(result.Skipped, item.CloneURL+" (task create failed: "+err.Error()+")")
 			continue

@@ -17,7 +17,7 @@
           row-key="config_id"
           :columns="columns"
           :data-source="data"
-          :scroll="{ x: '100%' }"
+          :scroll="{ x: 'max-content' }"
           size="middle"
           :loading="loading"
           class="w-full bg-white"

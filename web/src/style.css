@@ -219,6 +219,17 @@ body {
 .ant-table-tbody > tr.ant-table-row-selected:hover > td {
   background: #e4e4e7 !important; /* hover zinc-200 */
 }
+.ant-table-cell-fix-right,
+.ant-table-cell-fix-left {
+  background: #ffffff !important;
+}
+.ant-table-row:hover .ant-table-cell-fix-right,
+.ant-table-row:hover .ant-table-cell-fix-left {
+  background: #fafafa !important;
+}
+.ant-card-body {
+  padding: 20px !important;
+}
 
 /* Modals & Drawers - Shadcn light style */
 .ant-modal-content {

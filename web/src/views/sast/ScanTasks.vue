@@ -1,9 +1,9 @@
 <template>
   <div :class="['w-full mx-auto max-w-screen-2xl flex flex-col gap-6 bg-white', viewingTaskId ? 'h-[calc(100vh-112px)] overflow-hidden' : '']">
     <!-- State 1: Task List -->
-    <div v-if="!viewingTaskId" class="flex flex-col gap-6 flex-1 overflow-hidden">
+    <div v-if="!viewingTaskId" class="flex flex-col gap-6 w-full bg-white">
       <!-- Task List Card -->
-      <a-card title="SAST 任务列表" :bordered="false" class="rounded-lg flex-1 flex flex-col overflow-hidden border border-zinc-200 bg-white">
+      <a-card title="SAST 任务列表" :bordered="false" class="rounded-lg w-full border border-zinc-200 bg-white">
         <template #extra>
           <a-space>
             <a-select v-model:value="statusFilter" style="width: 150px" allow-clear placeholder="按状态筛选" @change="loadTasks">
@@ -18,7 +18,7 @@
           </a-space>
         </template>
 
-        <div class="flex-1 overflow-hidden h-full mt-2 bg-white">
+        <div class="mt-2 bg-white">
           <a-table
             row-key="id"
             :columns="taskColumns"
@@ -27,8 +27,8 @@
             :loading="taskLoading"
             :pagination="taskPagination"
             @change="handleTaskTableChange"
-            :scroll="{ x: '100%', y: '100%' }"
-            class="h-full w-full bg-white"
+            :scroll="{ x: 'max-content' }"
+            class="w-full bg-white"
           >
             <template #bodyCell="{ text, record, column }">
               <template v-if="column.key === 'target'">
@@ -104,7 +104,12 @@
               :class="['p-3.5 cursor-pointer flex items-center justify-between transition-colors', activeVulnId === item.id ? 'bg-zinc-100/70 font-semibold' : 'hover:bg-zinc-50']"
               @click="selectVuln(item)"
             >
-              <span class="font-mono text-xs text-zinc-800 truncate pr-2 flex-1">{{ item.rule_id }}</span>
+              <div class="flex items-center gap-1 flex-1 truncate pr-2">
+                <span class="font-mono text-xs text-zinc-800 truncate">{{ item.rule_id }}</span>
+                <a-tag v-if="item.ai_result || item.status === 'ai_triaged'" color="purple" class="font-bold scale-90 shrink-0">
+                  AI已验证
+                </a-tag>
+              </div>
               <a-tag :color="severityColor(item.severity)" class="font-semibold uppercase scale-90 scale-origin-right">
                 {{ item.severity }}
               </a-tag>
@@ -140,33 +145,68 @@
             </div>
           </div>
 
-          <!-- Bottom part: Taint Flow trace steps -->
-          <div class="h-[220px] border border-zinc-200 rounded-lg bg-white flex flex-col overflow-hidden">
-            <div class="p-3 border-b border-zinc-200 bg-zinc-50 text-xs font-semibold text-zinc-500">
-              污点追踪分析 (Taint Flow Trace)
-            </div>
-            <div class="flex-1 overflow-y-auto p-4 scrollbar-thin">
-              <div v-if="dangerPoints.length === 0" class="h-full flex items-center justify-center text-zinc-400 text-xs">
-                无追踪链路或该隐患没有发生变量污染传递
-              </div>
-              <div v-else class="flex flex-col gap-2">
-                <div 
-                  v-for="(step, index) in dangerPoints" 
-                  :key="step.key"
-                  :class="['p-2.5 rounded border transition-colors cursor-pointer flex items-center justify-between text-xs', activeStepIndex === index ? 'border-amber-500 bg-amber-50/50' : 'border-zinc-200 hover:border-zinc-300 bg-zinc-50/50']"
-                  @click="selectStep(step, index)"
-                >
-                  <div class="flex items-center gap-3">
-                    <span class="flex items-center justify-center w-5 h-5 rounded-full bg-zinc-200 text-zinc-600 font-bold font-mono text-[10px]">{{ index + 1 }}</span>
-                    <a-tag :color="step.point_type === 'source' ? 'green' : step.point_type === 'sink' ? 'red' : 'blue'" class="font-bold scale-90">
-                      {{ step.point_type.toUpperCase() }}
-                    </a-tag>
-                    <span class="font-mono text-zinc-800 truncate max-w-[400px]">{{ step.file_path }}</span>
+          <!-- Bottom part: Taint Flow trace steps & AI Audit Result -->
+          <div class="h-[280px] border border-zinc-200 rounded-lg bg-white flex flex-col overflow-hidden">
+            <a-tabs v-model:activeKey="bottomTabKey" class="flex-1 flex flex-col px-3 pt-1 border-b-none" size="small">
+              <a-tab-pane key="taint" tab="污点追踪分析 (Taint Flow Trace)">
+                <div class="p-2 overflow-y-auto max-h-[220px] scrollbar-thin">
+                  <div v-if="dangerPoints.length === 0" class="h-full py-8 text-center text-zinc-400 text-xs">
+                    无追踪链路或该隐患没有发生变量污染传递
                   </div>
-                  <span class="font-mono text-sky-600 font-semibold">L{{ step.start_line }}</span>
+                  <div v-else class="flex flex-col gap-2">
+                    <div 
+                      v-for="(step, index) in dangerPoints" 
+                      :key="step.key"
+                      :class="['p-2.5 rounded border transition-colors cursor-pointer flex items-center justify-between text-xs', activeStepIndex === index ? 'border-amber-500 bg-amber-50/50' : 'border-zinc-200 hover:border-zinc-300 bg-zinc-50/50']"
+                      @click="selectStep(step, index)"
+                    >
+                      <div class="flex items-center gap-3">
+                        <span class="flex items-center justify-center w-5 h-5 rounded-full bg-zinc-200 text-zinc-600 font-bold font-mono text-[10px]">{{ index + 1 }}</span>
+                        <a-tag :color="step.point_type === 'source' ? 'green' : step.point_type === 'sink' ? 'red' : 'blue'" class="font-bold scale-90">
+                          {{ step.point_type.toUpperCase() }}
+                        </a-tag>
+                        <span class="font-mono text-zinc-800 truncate max-w-[400px]">{{ step.file_path }}</span>
+                      </div>
+                      <span class="font-mono text-sky-600 font-semibold">L{{ step.start_line }}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </a-tab-pane>
+
+              <a-tab-pane key="ai" tab=" AI 分析">
+                <div class="p-2 overflow-y-auto max-h-[220px] scrollbar-thin text-xs leading-relaxed select-text">
+                  <div v-if="!parsedAiResult" class="h-full py-8 text-center text-zinc-400 text-xs">
+                    暂无 AI 验证结果。
+                  </div>
+                  <div v-else class="flex flex-col gap-3">
+                    <div v-if="parsedAiResult.vulnerability_report" class="bg-purple-50/50 p-3 rounded border border-purple-100">
+                      <div class="font-bold text-purple-900 mb-1">📋 漏洞成因分析报告：</div>
+                      <div class="text-zinc-700 whitespace-pre-wrap">{{ parsedAiResult.vulnerability_report }}</div>
+                    </div>
+
+                    <div v-if="parsedAiResult.wsl_docker_script" class="bg-zinc-950 text-zinc-100 p-3 rounded font-mono text-[11px] relative">
+                      <div class="flex items-center justify-between border-b border-zinc-800 pb-1 mb-2 text-zinc-400 text-[10px]">
+                        <span>🐳 WSL Docker 靶场复现脚本</span>
+                        <a-button type="link" size="small" class="!text-xs !p-0 !text-purple-400" @click="copyScript(parsedAiResult.wsl_docker_script)">
+                          复制脚本
+                        </a-button>
+                      </div>
+                      <pre class="whitespace-pre-wrap break-all select-all text-emerald-400">{{ parsedAiResult.wsl_docker_script }}</pre>
+                    </div>
+
+                    <div v-if="parsedAiResult.reproduce_steps" class="bg-zinc-50 p-3 rounded border border-zinc-200">
+                      <div class="font-bold text-zinc-800 mb-1">🛠️ 手动复现步骤 (PoC)：</div>
+                      <div class="text-zinc-700 whitespace-pre-wrap font-mono">{{ parsedAiResult.reproduce_steps }}</div>
+                    </div>
+
+                    <div v-if="parsedAiResult.verify_steps" class="bg-emerald-50/50 p-3 rounded border border-emerald-100">
+                      <div class="font-bold text-emerald-900 mb-1">✅ 安全防御验证逻辑：</div>
+                      <div class="text-zinc-700 whitespace-pre-wrap">{{ parsedAiResult.verify_steps }}</div>
+                    </div>
+                  </div>
+                </div>
+              </a-tab-pane>
+            </a-tabs>
           </div>
         </div>
       </div>
@@ -244,6 +284,26 @@ const activeVulnId = ref<number | null>(null);
 const activeVuln = ref<any | null>(null);
 const activeStepIndex = ref<number | null>(null);
 const activeStep = ref<DangerPoint | null>(null);
+const bottomTabKey = ref('taint');
+
+const parsedAiResult = computed(() => {
+  if (!activeVuln.value || !activeVuln.value.ai_result) return null;
+  let raw = activeVuln.value.ai_result;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return raw;
+});
+
+const copyScript = (text: string) => {
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  message.success('已复制 WSL Docker 脚本到剪贴板');
+};
 
 // Log Viewer State
 const logModalVisible = ref(false);

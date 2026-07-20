@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  app:
+    build:
+      context: ${PROJECT_SRC}
+      dockerfile: ${PWD}/Dockerfile
+    container_name: sast-container-mock_project_2038899505-9335
+    image: sast-container-mock_project_2038899505-9335
+    ports:
+      - "17915:8080"

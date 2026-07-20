@@ -155,3 +155,7 @@ func readCodeFromFile(srcDir, filePath string, startLine, endLine int) string {
 	}
 	return strings.Join(snippetLines, "\n")
 }
+
+func (w *ScanWorker) Cleanup(taskID string) error {
+	return w.codeql.CleanupGeneratedInputs(taskID)
+}

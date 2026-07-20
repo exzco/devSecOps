@@ -95,7 +95,11 @@
 ### 3.3 数据表格 (Tables)
 * **纯净排版**：移除表格的纵向列分割线，仅保留横向行分割线（`border-bottom`）。
 * **表头风格**：表头 `.ant-table-thead > tr > th` 背景统一设为 `#fafafa`，文字统一为 `Zinc-500`。
-* **横向自适应**：表格配置横向自适应滚动 `:scroll="{ x: '100%' }"`。**除特殊分栏视口外，绝不允许设置 `:scroll="{ y: ... }"` 等纵向限高属性**，防止表格数据因硬编码高度发生截断。
+* **横向自适应与滚幅规范**：
+  * **禁止内嵌嵌套滚动条**：绝不允许在 Card 或子框架容器内部对 Table 硬编码 `h-full` 并设置 `:scroll="{ y: '100%' }"` 等纵向限高属性。这会导致卡片内部弹出现独立的子滚动条，与外层 `a-layout-content` 产生双重滚动条冲突及右侧错位。
+  * **横向自适应属性**：表格横向自适应优先使用 `:scroll="{ x: 'max-content' }"` 代替 `:scroll="{ x: '100%' }"`，确保在不同分辨率下表格列宽度自然展开，防止右侧固定操作列被强行挤压截断。
+* **固定列 (Fixed Columns) 渲染防错位**：
+  * 当表格使用 `fixed: 'right'` 或 `fixed: 'left'` 时，必须在全局 CSS 中确保 `.ant-table-cell-fix-right` 及 `.ant-table-cell-fix-left` 背景色设为不透明的 `#ffffff`（Hover 状态为 `#fafafa`），消除默认悬浮背景穿透及与内部滑动轨道交叠导致的切割缝隙。
 
 ### 3.4 卡片与表单 (Cards & Forms)
 * 所有卡片（`a-card`）及表单输入框（`a-input`、`a-select`、`a-textarea`）边框色统一设为 `Zinc-200`（`#e4e4e7`）。

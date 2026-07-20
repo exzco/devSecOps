@@ -43,6 +43,7 @@ func (h *ScanHandler) CreateTask(c *gin.Context) {
 		req.QuerySuite,
 		req.RuleProfile,
 		strings.Join(req.Rules, ","),
+		req.UseAIVerification,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create scan task: " + err.Error()})

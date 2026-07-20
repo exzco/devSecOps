@@ -28,6 +28,7 @@ export interface TriggerScanPayload {
   query_suite?: string;
   rule_profile?: string;
   rules?: string[];
+  use_ai_verification?: boolean;
 }
 
 export const triggerScan = (payload: TriggerScanPayload) =>

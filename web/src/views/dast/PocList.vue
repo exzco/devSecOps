@@ -17,7 +17,7 @@
         :data-source="pocData"
         :loading="loading"
         size="middle"
-        :scroll="{ x: '100%' }"
+        :scroll="{ x: 'max-content' }"
         :pagination="{ pageSize: 15 }"
         class="bg-white"
       >

@@ -41,21 +41,23 @@ type ScanTask struct {
 	ErrorMsg     string         `json:"error_msg" gorm:"type:text"`
 	ExecutionLog string         `json:"execution_log" gorm:"type:text"`
 	SARIFPath    string         `json:"sarif_path" gorm:"size:512"`
-	WorkerID     string         `json:"worker_id" gorm:"size:128"`
-	VulnCount    int            `json:"vuln_count" gorm:"default:0"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
+	WorkerID          string         `json:"worker_id" gorm:"size:128"`
+	VulnCount         int            `json:"vuln_count" gorm:"default:0"`
+	UseAIVerification bool           `json:"use_ai_verification" gorm:"default:false"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	DeletedAt         gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // CreateScanRequest is the request body for manually triggering a scan
 type CreateScanRequest struct {
 	RepoID      uint     `json:"repo_id" binding:"required"`
 	Branch      string   `json:"branch" binding:"required"`
-	Language    string   `json:"language" binding:"required"`
-	QuerySuite  string   `json:"query_suite"`
-	RuleProfile string   `json:"rule_profile"`
-	Rules       []string `json:"rules"`
+	Language          string   `json:"language" binding:"required"`
+	QuerySuite        string   `json:"query_suite"`
+	RuleProfile       string   `json:"rule_profile"`
+	Rules             []string `json:"rules"`
+	UseAIVerification bool     `json:"use_ai_verification"`
 }
 
 // ScanTaskQuery contains query parameters for listing scan tasks
