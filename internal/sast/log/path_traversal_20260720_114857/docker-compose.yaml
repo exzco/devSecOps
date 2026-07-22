@@ -1,9 +1,0 @@
-version: '3.8'
-services:
-  web:
-    build:
-      context: "/mnt/c/Users/10278/AppData/Local/Temp/mock_project_3288718071"
-    container_name: sast-container-app-2496
-    image: sast-container-app-2496:latest
-    ports:
-      - "22046:8080"

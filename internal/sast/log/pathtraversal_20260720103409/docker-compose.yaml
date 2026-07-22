@@ -1,9 +1,0 @@
-version: '3.8'
-services:
-  app:
-    build:
-      context: /mnt/c/Users/10278/AppData/Local/Temp/mock_project_2906112468
-      dockerfile: /mnt/c/Users/10278/Desktop/2026-07/devsecops/internal/sast/log/pathtraversal_20260720103409/Dockerfile
-    ports:
-      - "52865:8080"
-    restart: "no"

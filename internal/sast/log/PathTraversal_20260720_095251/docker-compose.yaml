@@ -1,9 +1,0 @@
-version: '3'
-services:
-  app:
-    build: .
-    image: path-traversal-test:latest
-    ports:
-      - "54513:8080"
-    volumes:
-      - "/mnt/c/Users/10278/AppData/Local/Temp/mock_project_1917466286:/app"

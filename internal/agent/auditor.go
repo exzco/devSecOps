@@ -10,7 +10,7 @@ import (
 )
 
 const systemPrompt = `你是一名顶级应用安全专家（AppSec Expert）与代码审计大师。
-你的任务是对 SAST（静态代码分析）识别到的潜在漏洞进行深度的 LLM 语义分析与误报研判，并提供专业的修复建议与测试指引。
+你的任务是对 SAST（静态代码分析）识别到的潜在漏洞进行深度的 LLM 语义分析与误报研判，筛选真正具备业务危害的安全漏洞，并提供专业的修复建议与测试指引。
 
 [执行约束]
 1. 输出格式：必须仅输出一段合法的 JSON，不要输出任何 Markdown 包裹（即不要有 '''json），JSON 结构必须严格遵守：
@@ -21,9 +21,10 @@ const systemPrompt = `你是一名顶级应用安全专家（AppSec Expert）与
      "remediation_suggestion": "针对性的安全修复方案，并附上修复后的标准代码片段",
      "manual_poc": "安全人员手动复现/验证该漏洞的 HTTP 请求示例或 curl 命令（仅供测试验证）"
    }
-2. 误报研判逻辑 (is_false_positive)：
-   - 仔细审查提供的代码片段及上下文。如果代码中已经包含了有效的输入净化、消毒、类型转换或安全过滤逻辑（如使用了安全的 API、参数化查询等），请将 "is_false_positive" 标记为 true。
-   - 如果代码确实存在安全隐患且数据流可控，标记为 false。
+2. 误报研判与低质量漏洞过滤逻辑 (is_false_positive)：
+   - **低质量/代码规范类隐患过滤**：对于并不影响真实业务安全、无法独立构成有效攻击面的代码规范类或调试记录类提示（例如：日志注入 log-injection、明文日志记录 clear-text-logging、未显式配置 TLS、临时调试打印等），必须判定为非应用安全漏洞/误报，将 "is_false_positive" 标记为 true，并在 vulnerability_analysis 中明确指出：“此类问题仅属于日志输出规范或代码质量瑕疵，不构成对业务系统的严重安全威胁，已自动归类过滤”。
+   - **已有安全防护/输入净化过滤**：如果代码中已经包含了有效的输入净化、消毒、类型转换或安全过滤逻辑（如使用了安全的参数化 API 等），请将 "is_false_positive" 标记为 true。
+   - **高价值真实漏洞**：仅当代码确实存在高危安全隐患（如 RCE、SQLi、任意文件读写/路径穿越、SSRF、鉴权绕过等）且数据流来自不可信输入时，将 "is_false_positive" 标记为 false。
 3. 置信度评估 (confidence)：
    - 可选值: "High", "Medium", "Low"。
 4. 无害化限制：仅用于软件安全防御、代码研判与安全修复指导。`
@@ -132,8 +133,13 @@ func cleanJSONOutput(raw string) string {
 	} else if strings.HasPrefix(raw, "```") {
 		raw = strings.TrimPrefix(raw, "```")
 	}
-	if strings.HasSuffix(raw, "```") {
-		raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+
+	firstBrace := strings.Index(raw, "{")
+	lastBrace := strings.LastIndex(raw, "}")
+	if firstBrace != -1 && lastBrace > firstBrace {
+		raw = raw[firstBrace : lastBrace+1]
 	}
 	return strings.TrimSpace(raw)
 }

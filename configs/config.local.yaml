@@ -65,5 +65,5 @@ jwt:
 openai:
   api_key: "sk-060d9ac58b584a2eadaf159197b75029"
   base_url: "https://api.deepseek.com"
-  model: "deepseek-v4-pro"
+  model: "deepseek-reasoner"
 

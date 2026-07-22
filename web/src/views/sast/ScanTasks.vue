@@ -106,8 +106,8 @@
             >
               <div class="flex items-center gap-1 flex-1 truncate pr-2">
                 <span class="font-mono text-xs text-zinc-800 truncate">{{ item.rule_id }}</span>
-                <a-tag v-if="item.ai_result || item.status === 'ai_triaged'" color="purple" class="font-bold scale-90 shrink-0">
-                  AI已验证
+                <a-tag v-if="getAiTagInfo(item)" :color="getAiTagInfo(item)!.color" class="font-bold scale-90 shrink-0 border-none px-1.5">
+                  {{ getAiTagInfo(item)!.text }}
                 </a-tag>
               </div>
               <a-tag :color="severityColor(item.severity)" class="font-semibold uppercase scale-90 scale-origin-right">
@@ -174,16 +174,62 @@
               </a-tab-pane>
 
               <a-tab-pane key="ai" tab=" AI 分析">
-                <div class="p-2 overflow-y-auto max-h-[220px] scrollbar-thin text-xs leading-relaxed select-text">
+                <div class="p-3 overflow-y-auto max-h-[260px] scrollbar-thin text-xs leading-relaxed select-text">
                   <div v-if="!parsedAiResult" class="h-full py-8 text-center text-zinc-400 text-xs">
                     暂无 AI 验证结果。
                   </div>
                   <div v-else class="flex flex-col gap-3">
-                    <div v-if="parsedAiResult.vulnerability_report" class="bg-purple-50/50 p-3 rounded border border-purple-100">
-                      <div class="font-bold text-purple-900 mb-1">📋 漏洞成因分析报告：</div>
-                      <div class="text-zinc-700 whitespace-pre-wrap">{{ parsedAiResult.vulnerability_report }}</div>
+                    <!-- 1. 漏洞概述 -->
+                    <div v-if="parsedAiResult.vulnerability_analysis || parsedAiResult.vulnerability_report" class="bg-purple-50/50 p-3 rounded border border-purple-100">
+                      <div class="font-bold text-purple-900 mb-1 flex items-center gap-1.5">
+                        <span>📋</span>
+                        <span>漏洞概述 (Vulnerability Analysis)</span>
+                        <a-tag v-if="parsedAiResult.confidence" color="purple" class="ml-auto scale-90">
+                          置信度: {{ parsedAiResult.confidence }}
+                        </a-tag>
+                        <a-tag v-if="parsedAiResult.is_false_positive !== undefined" :color="parsedAiResult.is_false_positive ? 'red' : 'green'" class="scale-90">
+                          {{ parsedAiResult.is_false_positive ? '误报' : '确认漏洞' }}
+                        </a-tag>
+                      </div>
+                      <div class="text-zinc-700 whitespace-pre-wrap leading-relaxed">
+                        {{ parsedAiResult.vulnerability_analysis || parsedAiResult.vulnerability_report }}
+                      </div>
                     </div>
 
+                    <!-- 2. 复现步骤 -->
+                    <div v-if="parsedAiResult.manual_poc || parsedAiResult.reproduce_steps" class="bg-amber-50/50 p-3 rounded border border-amber-100">
+                      <div class="font-bold text-amber-900 mb-1 flex items-center justify-between">
+                        <span class="flex items-center gap-1.5">
+                          <span>🛠️</span>
+                          <span>复现步骤 (Manual PoC / Verification)</span>
+                        </span>
+                        <a-button 
+                          v-if="parsedAiResult.manual_poc || parsedAiResult.reproduce_steps" 
+                          type="link" 
+                          size="small" 
+                          class="!text-xs !p-0 !text-amber-700 font-normal"
+                          @click="copyScript(parsedAiResult.manual_poc || parsedAiResult.reproduce_steps)"
+                        >
+                          复制 PoC
+                        </a-button>
+                      </div>
+                      <div class="text-zinc-800 whitespace-pre-wrap font-mono text-[11px] bg-white p-2.5 rounded border border-amber-200/60 overflow-x-auto select-all">
+                        {{ parsedAiResult.manual_poc || parsedAiResult.reproduce_steps }}
+                      </div>
+                    </div>
+
+                    <!-- 3. 解决这个问题 / 修复建议 -->
+                    <div v-if="parsedAiResult.remediation_suggestion || parsedAiResult.verify_steps" class="bg-emerald-50/50 p-3 rounded border border-emerald-100">
+                      <div class="font-bold text-emerald-900 mb-1 flex items-center gap-1.5">
+                        <span>💡</span>
+                        <span>修复建议 (Remediation Suggestion)</span>
+                      </div>
+                      <div class="text-zinc-700 whitespace-pre-wrap leading-relaxed">
+                        {{ parsedAiResult.remediation_suggestion || parsedAiResult.verify_steps }}
+                      </div>
+                    </div>
+
+                    <!-- 4. WSL Docker 复现环境 (可选) -->
                     <div v-if="parsedAiResult.wsl_docker_script" class="bg-zinc-950 text-zinc-100 p-3 rounded font-mono text-[11px] relative">
                       <div class="flex items-center justify-between border-b border-zinc-800 pb-1 mb-2 text-zinc-400 text-[10px]">
                         <span>🐳 WSL Docker 靶场复现脚本</span>
@@ -192,16 +238,6 @@
                         </a-button>
                       </div>
                       <pre class="whitespace-pre-wrap break-all select-all text-emerald-400">{{ parsedAiResult.wsl_docker_script }}</pre>
-                    </div>
-
-                    <div v-if="parsedAiResult.reproduce_steps" class="bg-zinc-50 p-3 rounded border border-zinc-200">
-                      <div class="font-bold text-zinc-800 mb-1">🛠️ 手动复现步骤 (PoC)：</div>
-                      <div class="text-zinc-700 whitespace-pre-wrap font-mono">{{ parsedAiResult.reproduce_steps }}</div>
-                    </div>
-
-                    <div v-if="parsedAiResult.verify_steps" class="bg-emerald-50/50 p-3 rounded border border-emerald-100">
-                      <div class="font-bold text-emerald-900 mb-1">✅ 安全防御验证逻辑：</div>
-                      <div class="text-zinc-700 whitespace-pre-wrap">{{ parsedAiResult.verify_steps }}</div>
                     </div>
                   </div>
                 </div>
@@ -219,13 +255,21 @@
       width="800px"
       :body-style="{ padding: '0px' }"
       destroy-on-close
+      @cancel="handleLogModalClose"
     >
-      <div class="bg-zinc-950 text-zinc-100 p-4 font-mono text-xs overflow-auto h-[450px] leading-relaxed select-text">
+      <div class="px-4 py-2 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between text-xs text-zinc-400 font-mono">
+        <span class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          日志详情
+        </span>
+        <span class="text-zinc-500">已加载 {{ taskLogs.length }} 行日志</span>
+      </div>
+      <div ref="logContainerRef" class="bg-zinc-950 text-zinc-100 p-4 font-mono text-xs overflow-auto h-[450px] leading-relaxed select-text">
         <div v-if="logLoading" class="h-full flex items-center justify-center text-zinc-400">
-          加载日志中...
+          正在读取日志数据...
         </div>
         <div v-else-if="taskLogs.length === 0" class="h-full flex items-center justify-center text-zinc-400">
-          无可用日志
+          暂无执行日志记录
         </div>
         <div v-else>
           <div 
@@ -243,7 +287,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { 
   ArrowLeftOutlined 
@@ -289,15 +333,68 @@ const bottomTabKey = ref('taint');
 const parsedAiResult = computed(() => {
   if (!activeVuln.value || !activeVuln.value.ai_result) return null;
   let raw = activeVuln.value.ai_result;
+  if (typeof raw === 'object' && raw !== null) {
+    return raw;
+  }
   if (typeof raw === 'string') {
+    let str = raw.trim();
+    if (str.startsWith('```json')) str = str.replace(/^```json/, '');
+    if (str.startsWith('```')) str = str.replace(/^```/, '');
+    if (str.endsWith('```')) str = str.replace(/```$/, '');
+    str = str.trim();
+
+    const firstBrace = str.indexOf('{');
+    const lastBrace = str.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      str = str.substring(firstBrace, lastBrace + 1);
+    }
+
     try {
-      raw = JSON.parse(raw);
+      return JSON.parse(str);
     } catch {
-      return null;
+      return {
+        vulnerability_analysis: raw
+      };
     }
   }
-  return raw;
+  return null;
 });
+
+const getAiTagInfo = (item: any) => {
+  if (!item || (!item.ai_result && item.status !== 'ai_triaged' && item.status !== 'false_positive')) {
+    return null;
+  }
+
+  let isFalse = false;
+  if (item.status === 'false_positive') {
+    isFalse = true;
+  } else if (item.ai_result) {
+    let res = item.ai_result;
+    if (typeof res === 'string') {
+      try {
+        let str = res.trim();
+        if (str.startsWith('```json')) str = str.replace(/^```json/, '');
+        if (str.startsWith('```')) str = str.replace(/^```/, '');
+        if (str.endsWith('```')) str = str.replace(/```$/, '');
+        const firstBrace = str.indexOf('{');
+        const lastBrace = str.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          str = str.substring(firstBrace, lastBrace + 1);
+        }
+        res = JSON.parse(str);
+      } catch {
+        res = null;
+      }
+    }
+    if (res && res.is_false_positive === true) {
+      isFalse = true;
+    }
+  }
+
+  return isFalse 
+    ? { color: 'orange', text: 'AI: 误报' } 
+    : { color: 'green', text: 'AI: 真实' };
+};
 
 const copyScript = (text: string) => {
   if (!text) return;
@@ -305,23 +402,39 @@ const copyScript = (text: string) => {
   message.success('已复制 WSL Docker 脚本到剪贴板');
 };
 
-// Log Viewer State
+// Log Viewer State (Direct One-time HTTP Fetch)
 const logModalVisible = ref(false);
 const logLoading = ref(false);
 const taskLogs = ref<string[]>([]);
+const logContainerRef = ref<HTMLDivElement | null>(null);
+
+const scrollToLogBottom = () => {
+  nextTick(() => {
+    if (logContainerRef.value) {
+      logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight;
+    }
+  });
+};
 
 const handleShowLogs = async (taskId: number) => {
   logModalVisible.value = true;
   logLoading.value = true;
   taskLogs.value = [];
+
   try {
     const res = await getScanTaskLogs(taskId);
-    taskLogs.value = res.data.data.logs || [];
+    const logs = res.data?.data?.logs || [];
+    taskLogs.value = Array.isArray(logs) ? logs : [];
+    scrollToLogBottom();
   } catch (err) {
-    message.error('获取扫描日志失败');
+    message.error('获取日志详情失败');
   } finally {
     logLoading.value = false;
   }
+};
+
+const handleLogModalClose = () => {
+  logModalVisible.value = false;
 };
 
 // Forms & Filter

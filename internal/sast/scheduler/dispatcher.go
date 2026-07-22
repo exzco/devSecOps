@@ -229,6 +229,24 @@ func (d *TaskDispatcher) triggerAIAudit(taskID uint, language, repoURL, projectD
 
 	successCount := 0
 	for _, vuln := range vulns {
+		if isLowImpactRule(vuln.RuleID) {
+			d.appendTaskLog(taskID, fmt.Sprintf("[AI-Audit] 规则 %s 属于低危害/日志规范瑕疵，自动跳过 AI API 验证以节省 Token", vuln.RuleID))
+			skipResult := map[string]interface{}{
+				"is_false_positive":      true,
+				"confidence":             "High",
+				"vulnerability_analysis": fmt.Sprintf("规则 %s 属于低危害/日志规范瑕疵，已被系统自动归类过滤，无需消耗 AI Token。", vuln.RuleID),
+				"remediation_suggestion": "建议使用结构化日志 (如 slog 或 zap) 避免拼接日志。",
+				"manual_poc":             "无需复现",
+			}
+			resultJSON, _ := json.Marshal(skipResult)
+			d.db.Model(&vuln).Updates(map[string]interface{}{
+				"ai_result": datatypes.JSON(resultJSON),
+				"status":    model.VulnStatusFalsePositive,
+			})
+			successCount++
+			continue
+		}
+
 		codeCtx := fmt.Sprintf("Rule: %s\nFile: %s:%d\nSnippet:\n%s", vuln.RuleID, vuln.FilePath, vuln.StartLine, vuln.CodeSnippet)
 		
 		result, err := auditor.AnalyzeVulnerabilityWithLogger(ctx, vuln.RuleName, language, projectDesc, codeCtx, logFn)
@@ -251,4 +269,20 @@ func (d *TaskDispatcher) triggerAIAudit(taskID uint, language, repoURL, projectD
 	}
 
 	d.appendTaskLog(taskID, fmt.Sprintf("[AI-Audit] LLM 语义分析阶段完成，共处理 %d 个漏洞，成功分析 %d 个", len(vulns), successCount))
+}
+
+func isLowImpactRule(ruleID string) bool {
+	r := strings.ToLower(strings.TrimSpace(ruleID))
+	lowKeywords := []string{
+		"log-injection",
+		"clear-text-logging",
+		"disabled-tls",
+		"weak-sensitive-data-hashing",
+	}
+	for _, kw := range lowKeywords {
+		if strings.Contains(r, kw) {
+			return true
+		}
+	}
+	return false
 }

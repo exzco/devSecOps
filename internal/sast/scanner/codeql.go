@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"devsecops/internal/config"
 )
@@ -32,28 +33,48 @@ func (g *GitManager) CloneRepo(ctx context.Context, repoURL, branch, taskID stri
 		cloneURL = strings.Replace(cloneURL, "http://", "http://oauth2:"+authSecret+"@", 1)
 	}
 
-	args := []string{"clone", "--depth", "1"}
+	args := []string{
+		"-c", "http.postBuffer=524288000",
+		"-c", "http.lowSpeedLimit=1000",
+		"-c", "http.lowSpeedTime=60",
+		"clone",
+		"--depth", "1",
+		"--single-branch",
+	}
 	if branch != "" {
 		args = append(args, "--branch", branch)
 	}
 	args = append(args, cloneURL, destDir)
 
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	var output []byte
+	var err error
+	maxRetries := 3
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// 每次重试前清理目标目录
+		_ = os.RemoveAll(destDir)
+		_ = os.MkdirAll(destDir, 0755)
+
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+
+		output, err = cmd.CombinedOutput()
+		if err == nil {
+			return destDir, nil
+		}
+
 		errMsg := string(output)
-		// 给出更友好的提示：认证失败时提醒用户配置 Token
 		if strings.Contains(errMsg, "terminal prompts disabled") ||
 			strings.Contains(errMsg, "could not read Username") ||
 			strings.Contains(errMsg, "Authentication failed") {
 			return "", fmt.Errorf("仓库认证失败：无法访问 %s\n如果是私有仓库，请在仓库配置中将 Auth Type 设为 token 并填入有效的 Personal Access Token\n原始错误: %s", repoURL, errMsg)
 		}
-		return "", fmt.Errorf("git clone failed: %w, output: %s", err, errMsg)
+
+		log.Printf("[GitManager] 克隆 %s 失败 (尝试 %d/%d): %v, 输出: %s", repoURL, attempt, maxRetries, err, errMsg)
+		time.Sleep(time.Duration(attempt*2) * time.Second)
 	}
 
-	return destDir, nil
+	return "", fmt.Errorf("git clone failed after %d retries: %w, output: %s", maxRetries, err, string(output))
 }
 
 func (g *GitManager) GetLatestCommit(ctx context.Context, repoDir string) (string, error) {

@@ -122,24 +122,58 @@
       title="触发扫描" 
       ok-text="开始扫描"
       cancel-text="取消"
+      width="640px"
       @ok="handleConfirmScan"
     >
-      <div class="pt-4">
+      <div class="pt-2">
         <a-form :model="scanForm" layout="vertical">
-          <a-form-item label="规则策略">
-            <a-select v-model:value="scanForm.rule_profile" placeholder="baseline / cve_hot / zero_day_only">
-              <a-select-option value="baseline">baseline</a-select-option>
-              <a-select-option value="cve_hot">cve_hot</a-select-option>
-              <a-select-option value="zero_day_only">zero_day_only</a-select-option>
-            </a-select>
+          <a-form-item required>
+            <template #label>
+              <span class="font-bold text-zinc-800">Rules</span>
+            </template>
+            <div class="p-4 bg-zinc-50 border border-zinc-200/80 rounded-lg">
+              <div class="grid grid-cols-3 gap-y-3.5 gap-x-2 text-xs">
+                <a-checkbox v-model:checked="scanForm.rules.cwe078">
+                  <span class="font-medium">CWE-078 (Command Injection)</span>
+                </a-checkbox>
+                <a-checkbox v-model:checked="scanForm.rules.cwe502">
+                  <span class="font-medium">CWE-502 (Deserialization)</span>
+                </a-checkbox>
+                <a-checkbox v-model:checked="scanForm.rules.cwe094">
+                  <span class="font-medium">CWE-094 (Code Injection)</span>
+                </a-checkbox>
+
+                <a-checkbox v-model:checked="scanForm.rules.cwe918">
+                  <span class="font-medium">CWE-918 (SSRF)</span>
+                </a-checkbox>
+                <a-checkbox v-model:checked="scanForm.rules.cwe611">
+                  <span class="font-medium">CWE-611 (XXE)</span>
+                </a-checkbox>
+                <a-checkbox v-model:checked="scanForm.rules.cwe089">
+                  <span class="font-medium">CWE-089 (SQL Injection)</span>
+                </a-checkbox>
+
+                <a-checkbox v-model:checked="scanForm.rules.cwe079">
+                  <span class="font-medium">CWE-079 (XSS)</span>
+                </a-checkbox>
+              </div>
+            </div>
           </a-form-item>
-          <a-form-item label="额外规则">
-            <a-input v-model:value="scanForm.query_suite" :maxlength="512" placeholder="支持逗号分隔多个 .ql/.qls" />
+
+          <a-form-item label="自定义 QL 规则 (.ql / .qls)">
+            <a-input v-model:value="scanForm.query_suite" :maxlength="512" placeholder="支持逗号分隔多个规则路径，如: rules/codeql/rce.ql" />
           </a-form-item>
-          <a-form-item label="验证 (AI)">
-            <a-switch v-model:checked="scanForm.use_ai_verification" />
-            <span class="ml-2 text-zinc-500 text-xs">启动后将自动调用大语言模型对漏洞生成测试代码并创建本地靶机环境复现。</span>
-          </a-form-item>
+
+          <div class="pt-2 border-t border-zinc-100">
+            <div class="text-xs font-bold text-zinc-700 mb-2">测试选项</div>
+            <div class="flex items-center gap-3">
+              <a-switch v-model:checked="scanForm.use_ai_verification" />
+              <span class="text-xs text-zinc-600 font-medium">AI 验证</span>
+            </div>
+            <div class="mt-1 text-zinc-400 text-[11px]">
+              启动后调用 LLM 对检测出的漏洞进行进一步验证
+            </div>
+          </div>
         </a-form>
       </div>
     </a-modal>
@@ -193,6 +227,15 @@ interface ScanForm {
   rule_profile: RuleProfile;
   query_suite: string;
   use_ai_verification: boolean;
+  rules: {
+    cwe078: boolean;
+    cwe502: boolean;
+    cwe094: boolean;
+    cwe918: boolean;
+    cwe611: boolean;
+    cwe089: boolean;
+    cwe079: boolean;
+  };
 }
 
 const BRANCH_REGEX = /^[A-Za-z0-9._/-]{1,128}$/;
@@ -276,6 +319,15 @@ const scanForm = reactive<ScanForm>({
   rule_profile: 'baseline',
   query_suite: '',
   use_ai_verification: false,
+  rules: {
+    cwe078: true,
+    cwe502: false,
+    cwe094: true,
+    cwe918: false,
+    cwe611: false,
+    cwe089: true,
+    cwe079: true,
+  },
 });
 
 const loadData = async () => {
@@ -402,6 +454,13 @@ const handleScan = (record: RepoRecord) => {
   scanForm.query_suite = '';
   scanForm.rule_profile = 'baseline';
   scanForm.use_ai_verification = false;
+  scanForm.rules.cwe078 = true;
+  scanForm.rules.cwe502 = false;
+  scanForm.rules.cwe094 = true;
+  scanForm.rules.cwe918 = false;
+  scanForm.rules.cwe611 = false;
+  scanForm.rules.cwe089 = true;
+  scanForm.rules.cwe079 = true;
   scanVisible.value = true;
 };
 
@@ -414,6 +473,15 @@ const handleConfirmScan = async () => {
     return;
   }
 
+  const selectedRules: string[] = [];
+  if (scanForm.rules.cwe078) selectedRules.push('cwe-078');
+  if (scanForm.rules.cwe502) selectedRules.push('cwe-502');
+  if (scanForm.rules.cwe094) selectedRules.push('cwe-094');
+  if (scanForm.rules.cwe918) selectedRules.push('cwe-918');
+  if (scanForm.rules.cwe611) selectedRules.push('cwe-611');
+  if (scanForm.rules.cwe089) selectedRules.push('cwe-089');
+  if (scanForm.rules.cwe079) selectedRules.push('cwe-079');
+
   try {
     await triggerScan({
       repo_id: scanTarget.value.id,
@@ -421,6 +489,7 @@ const handleConfirmScan = async () => {
       branch: scanTarget.value.branch,
       rule_profile: scanForm.rule_profile || undefined,
       query_suite: normalizedQuerySuite || undefined,
+      rules: selectedRules.length > 0 ? selectedRules : undefined,
       use_ai_verification: scanForm.use_ai_verification,
     });
     scanVisible.value = false;

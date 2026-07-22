@@ -3,12 +3,14 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
@@ -300,6 +302,72 @@ func (h *ScanHandler) GetTaskLogs(c *gin.Context) {
 			"logs":        logs,
 			"finished_at": task.FinishedAt,
 		},
+	})
+}
+
+func (h *ScanHandler) StreamTaskLogs(c *gin.Context) {
+	taskID, ok := parseTaskIDParam(c)
+	if !ok {
+		return
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("Transfer-Encoding", "chunked")
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+
+	sentCount := 0
+	ticker := time.NewTicker(800 * time.Millisecond)
+	defer ticker.Stop()
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case <-c.Request.Context().Done():
+			return false
+		case <-ticker.C:
+			task, err := h.scanSvc.GetTask(taskID)
+			if err != nil {
+				c.SSEvent("error", gin.H{"error": "task not found"})
+				return false
+			}
+
+			logs := make([]string, 0, 64)
+			if trimmed := strings.TrimSpace(task.ExecutionLog); trimmed != "" {
+				for _, line := range strings.Split(trimmed, "\n") {
+					if item := strings.TrimSpace(line); item != "" {
+						logs = append(logs, item)
+					}
+				}
+			}
+
+			if task.ErrorMsg != "" {
+				logs = append(logs, "[ERROR] "+task.ErrorMsg)
+			}
+
+			if sentCount < len(logs) {
+				newLogs := logs[sentCount:]
+				sentCount = len(logs)
+				c.SSEvent("log", gin.H{
+					"task_id":    task.ID,
+					"status":     task.Status,
+					"new_logs":   newLogs,
+					"total_logs": sentCount,
+				})
+			}
+
+			if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailed || task.Status == model.TaskStatusCanceled || task.Status == model.TaskStatusTimeout {
+				c.SSEvent("status", gin.H{
+					"task_id":     task.ID,
+					"status":      task.Status,
+					"finished_at": task.FinishedAt,
+					"vuln_count":  task.VulnCount,
+					"done":        true,
+				})
+				return false
+			}
+			return true
+		}
 	})
 }
 

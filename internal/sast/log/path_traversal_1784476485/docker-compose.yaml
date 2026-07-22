@@ -1,8 +1,0 @@
-version: "3"
-services:
-  app:
-    build: .
-    ports:
-      - "53287:8080"
-houdini:
-    restart: no

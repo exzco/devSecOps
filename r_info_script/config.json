@@ -1,0 +1,12 @@
+{
+  "backend_url": "http://localhost:22211",
+  "github_token": "",
+  "llm_api_key": "",
+  "llm_base_url": "https://api.deepseek.com",
+  "llm_model": "",
+  "min_stars": 20,
+  "max_repos_per_query": 10,
+  "query_suite": "",
+  "use_ai_verification": true,
+  "macro_goal": "搜集正在活跃维护、易于本地复现的轻量级 Go 开源应用 (如 Go CMS、博客系统、基于 Gin/Fiber 的简单后台、文件传输存储服务)，筛选具备 0-day 漏洞挖掘价值与 CVE 申请潜力的目标，严禁搜集部署复现困难的复杂 ERP/CRM 及大型网关平台"
+}

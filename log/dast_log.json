@@ -23,3 +23,33 @@
 {"time":"2026-07-20T11:05:39+08:00","message":"[port-worker] started, waiting for jobs on scan:port:jobs ..."}
 {"time":"2026-07-20T11:05:39+08:00","message":"[poc-worker] started, waiting for jobs on scan:poc:jobs ..."}
 {"time":"2026-07-20T11:05:39+08:00","message":"[fp-worker] started, waiting for jobs on scan:fp:jobs ..."}
+{"time":"2026-07-21T14:41:08+08:00","message":"[dast-queue] Redis connected: localhost:6379 (db=10)"}
+{"time":"2026-07-21T14:41:09+08:00","message":"[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started."}
+{"time":"2026-07-21T14:41:09+08:00","message":"[port-worker] started, waiting for jobs on scan:port:jobs ..."}
+{"time":"2026-07-21T14:41:09+08:00","message":"[fp-worker] started, waiting for jobs on scan:fp:jobs ..."}
+{"time":"2026-07-21T14:41:09+08:00","message":"[poc-worker] started, waiting for jobs on scan:poc:jobs ..."}
+{"time":"2026-07-21T15:54:39+08:00","message":"[dast-queue] Redis connected: localhost:6379 (db=10)"}
+{"time":"2026-07-21T15:54:39+08:00","message":"[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started."}
+{"time":"2026-07-21T15:54:39+08:00","message":"[port-worker] started, waiting for jobs on scan:port:jobs ..."}
+{"time":"2026-07-21T15:54:39+08:00","message":"[fp-worker] started, waiting for jobs on scan:fp:jobs ..."}
+{"time":"2026-07-21T15:54:39+08:00","message":"[poc-worker] started, waiting for jobs on scan:poc:jobs ..."}
+{"time":"2026-07-21T17:03:48+08:00","message":"[dast-queue] Redis connected: localhost:6379 (db=10)"}
+{"time":"2026-07-21T17:03:49+08:00","message":"[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started."}
+{"time":"2026-07-21T17:03:49+08:00","message":"[port-worker] started, waiting for jobs on scan:port:jobs ..."}
+{"time":"2026-07-21T17:03:49+08:00","message":"[fp-worker] started, waiting for jobs on scan:fp:jobs ..."}
+{"time":"2026-07-21T17:03:49+08:00","message":"[poc-worker] started, waiting for jobs on scan:poc:jobs ..."}
+{"time":"2026-07-21T17:12:01+08:00","message":"[dast-queue] Redis connected: localhost:6379 (db=10)"}
+{"time":"2026-07-21T17:12:01+08:00","message":"[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started."}
+{"time":"2026-07-21T17:12:01+08:00","message":"[port-worker] started, waiting for jobs on scan:port:jobs ..."}
+{"time":"2026-07-21T17:12:01+08:00","message":"[poc-worker] started, waiting for jobs on scan:poc:jobs ..."}
+{"time":"2026-07-21T17:12:01+08:00","message":"[fp-worker] started, waiting for jobs on scan:fp:jobs ..."}
+{"time":"2026-07-21T17:54:50+08:00","message":"[dast-queue] Redis connected: localhost:6379 (db=10)"}
+{"time":"2026-07-21T17:54:51+08:00","message":"[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started."}
+{"time":"2026-07-21T17:54:51+08:00","message":"[port-worker] started, waiting for jobs on scan:port:jobs ..."}
+{"time":"2026-07-21T17:54:51+08:00","message":"[fp-worker] started, waiting for jobs on scan:fp:jobs ..."}
+{"time":"2026-07-21T17:54:51+08:00","message":"[poc-worker] started, waiting for jobs on scan:poc:jobs ..."}
+{"time":"2026-07-21T19:35:22+08:00","message":"[dast-queue] Redis connected: localhost:6379 (db=10)"}
+{"time":"2026-07-21T19:35:22+08:00","message":"[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started."}
+{"time":"2026-07-21T19:35:22+08:00","message":"[port-worker] started, waiting for jobs on scan:port:jobs ..."}
+{"time":"2026-07-21T19:35:22+08:00","message":"[fp-worker] started, waiting for jobs on scan:fp:jobs ..."}
+{"time":"2026-07-21T19:35:22+08:00","message":"[poc-worker] started, waiting for jobs on scan:poc:jobs ..."}
