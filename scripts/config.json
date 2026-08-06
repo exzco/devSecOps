@@ -1,0 +1,10 @@
+{
+  "backend_url": "http://localhost:22211",
+  "min_stars": 100,
+  "llm_api_key": "sk-d50e51f53f214dc9845a044ca6b1044d",
+  "llm_base_url": "https://api.deepseek.com",
+   "llm_model": "deepseek-v4-flash",
+  "max_repos_per_query": 10,
+  "use_ai_verification": true,
+  "macro_goal": "搜集 GitHub 上 Star 数在 100 到 3000 之间活跃维护的 Go 语言 Web 框架中间件、CMS 管理系统、API 网关、文件传输平台，筛选具备任意文件读取、RCE 命令注入、SQL 注入和 SSRF 0-day 漏洞挖掘价值与 CVE 申请潜力的开源目标"
+}

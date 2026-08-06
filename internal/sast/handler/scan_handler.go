@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -15,9 +14,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 
+	"devsecops/pkg/logger"
+	"devsecops/internal/sast/async"
 	"devsecops/internal/sast/model"
 	"devsecops/internal/sast/scanner"
-	"devsecops/internal/sast/scheduler"
 	"devsecops/internal/sast/service"
 )
 
@@ -52,7 +52,7 @@ func (h *ScanHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	asynqTask, err := scheduler.NewScanRepoTask(req.RepoID, task.ID)
+	asynqTask, err := async.NewScanRepoTask(req.RepoID, task.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build async task: " + err.Error()})
 		return
@@ -67,7 +67,7 @@ func (h *ScanHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[API] scan task enqueued id=%s, queue=%s", info.ID, info.Queue)
+	logger.SAST("API", "scan task enqueued id=%s, queue=%s", info.ID, info.Queue)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "scan task submitted",
@@ -126,6 +126,7 @@ func (h *ScanHandler) DeleteTask(c *gin.Context) {
 		return
 	}
 
+	async.CancelTask(taskID)
 	if err := h.scanSvc.DeleteTask(taskID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete task: " + err.Error()})
 		return
@@ -332,14 +333,7 @@ func (h *ScanHandler) StreamTaskLogs(c *gin.Context) {
 				return false
 			}
 
-			logs := make([]string, 0, 64)
-			if trimmed := strings.TrimSpace(task.ExecutionLog); trimmed != "" {
-				for _, line := range strings.Split(trimmed, "\n") {
-					if item := strings.TrimSpace(line); item != "" {
-						logs = append(logs, item)
-					}
-				}
-			}
+			logs := parseNonEmptyLogLines(task.ExecutionLog)
 
 			if task.ErrorMsg != "" {
 				logs = append(logs, "[ERROR] "+task.ErrorMsg)
@@ -378,4 +372,19 @@ func parseTaskIDParam(c *gin.Context) (uint, bool) {
 		return 0, false
 	}
 	return uint(taskID), true
+}
+
+// parseNonEmptyLogLines splits raw log text into non-empty trimmed lines.
+func parseNonEmptyLogLines(rawLog string) []string {
+	trimmed := strings.TrimSpace(rawLog)
+	if trimmed == "" {
+		return nil
+	}
+	var lines []string
+	for _, line := range strings.Split(trimmed, "\n") {
+		if item := strings.TrimSpace(line); item != "" {
+			lines = append(lines, item)
+		}
+	}
+	return lines
 }

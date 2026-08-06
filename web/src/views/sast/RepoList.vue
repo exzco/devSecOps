@@ -196,7 +196,7 @@ import {
   getRepoList, 
   triggerScan, 
   updateRepo 
-} from '../../api';
+} from '../../api/sast';
 
 type RepoLanguage = 'go' | 'java' | 'javascript' | 'python';
 type AuthType = 'none' | 'token' | 'ssh_key';

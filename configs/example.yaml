@@ -16,11 +16,11 @@ redis:
   db: 10
 
 scanner:
-  codeql_path: "D:/web/codeql-cli/codeql.exe" # CodeQL CLI 路径
-  codeql_queries: "D:/web/codeql-codeql-cli-v2.25.6" # CodeQL 查询库路径
-  work_dir: "./internal/sast/result" # 扫描工作目录
-  max_concurrent: 2 # 最大并发扫描数
-  timeout_minutes: 30 # 单次扫描最长时间
+  codeql_path: "D:/web/codeql-cli/codeql.exe"
+  codeql_queries: "D:/web/codeql-codeql-cli-v2.25.6"
+  work_dir: "./result/sast"
+  max_concurrent: 2
+  timeout_minutes: 30
   default_profile: baseline
   rule_profiles:
     baseline:
@@ -37,6 +37,8 @@ dast:
   redis_dial_timeout: 5
   redis_read_timeout: 60
   poc_dir: "./internal/dast/poc"
+  log_dir: "./result/dast/log"
+  result_dir: "./result/dast"
   default_ports: "top1000"
   queue_prefix: "scan"
   portscan_rate: 1000
@@ -46,7 +48,7 @@ dast:
   console_log: true
 
 sca:
-  work_dir: "./internal/sca/sca_result"
+  work_dir: "./result/sca"
   osv_api_url: "https://api.osv.dev/v1/querybatch"
   timeout_minutes: 15
   max_concurrent: 2
@@ -59,11 +61,10 @@ minio:
   use_ssl: false
 
 jwt:
-  secret: "your_jwt_secret_here" # 密钥
+  secret: "your_jwt_secret_here"
   expire_hours: 72
 
 openai:
-  api_key: "your_deepseek_api_key_here" # 填写 DeepSeek / OpenAI API Key
+  api_key: "sk-d50e51f53f214dc9845a044ca6b1044d"
   base_url: "https://api.deepseek.com"
   model: "deepseek-chat"
-

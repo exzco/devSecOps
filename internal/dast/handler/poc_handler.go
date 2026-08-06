@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -35,99 +34,81 @@ type UpdatePocRequest struct {
 }
 
 func (h *PocHandler) ListPocs(c *gin.Context) {
-	ctx := context.Background()
-	pocs, err := h.svc.ListPocs(ctx)
+	pocs, err := h.svc.ListPocs(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": -1, "error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "ok", "data": pocs})
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": pocs})
 }
 
 func (h *PocHandler) CreatePoc(c *gin.Context) {
 	var req CreatePocRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "error": err.Error()})
 		return
 	}
 	if req.Severity == "" {
 		req.Severity = "info"
 	}
 
-	ctx := context.Background()
-	meta, err := h.svc.CreatePoc(ctx, req.Name, req.Description, req.Severity, req.Tags, req.Content)
+	meta, err := h.svc.CreatePoc(c.Request.Context(), req.Name, req.Description, req.Severity, req.Tags, req.Content)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": -1, "error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "PoC 模板创建成功", "data": meta})
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "PoC 模板创建成功", "data": meta})
 }
 
 func (h *PocHandler) UpdatePoc(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少模板 ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "error": "缺少模板 ID"})
 		return
 	}
 
 	var req UpdatePocRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "error": err.Error()})
 		return
 	}
 
-	ctx := context.Background()
-	meta, err := h.svc.UpdatePoc(ctx, id, req.Name, req.Description, req.Severity, req.Tags, req.Content)
+	meta, err := h.svc.UpdatePoc(c.Request.Context(), id, req.Name, req.Description, req.Severity, req.Tags, req.Content)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"code": -1, "error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "模板更新成功", "data": meta})
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "模板更新成功", "data": meta})
 }
 
 func (h *PocHandler) GetPoc(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少模板 ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "error": "缺少模板 ID"})
 		return
 	}
 
-	ctx := context.Background()
-	list, err := h.svc.ListPocs(ctx)
+	meta, content, err := h.svc.GetPocByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	var target *service.PocMeta
-	for _, m := range list {
-		if m.ID == id {
-			target = &m
-			break
-		}
-	}
-	if target == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "模板不存在"})
-		return
-	}
-
-	content, err := h.svc.GetPocContent(ctx, id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"code": -1, "error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
 		"message": "ok",
 		"data": gin.H{
-			"id":          target.ID,
-			"name":        target.Name,
-			"description": target.Description,
-			"severity":    target.Severity,
-			"tags":        target.Tags,
-			"file_path":   target.FilePath,
-			"created_at":  target.CreatedAt,
-			"updated_at":  target.UpdatedAt,
+			"id":          meta.ID,
+			"name":        meta.Name,
+			"description": meta.Description,
+			"severity":    meta.Severity,
+			"tags":        meta.Tags,
+			"file_path":   meta.FilePath,
+			"created_at":  meta.CreatedAt,
+			"updated_at":  meta.UpdatedAt,
 			"content":     content,
 		},
 	})
@@ -136,14 +117,14 @@ func (h *PocHandler) GetPoc(c *gin.Context) {
 func (h *PocHandler) DeletePoc(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少模板 ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": -1, "error": "缺少模板 ID"})
 		return
 	}
 
-	ctx := context.Background()
-	if err := h.svc.DeletePoc(ctx, id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	if err := h.svc.DeletePoc(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": -1, "error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "模板已删除", "data": gin.H{"id": id}})
+
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "模板已删除", "data": gin.H{"id": id}})
 }

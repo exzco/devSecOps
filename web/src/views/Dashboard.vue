@@ -76,13 +76,13 @@
 import { ref, onMounted, computed } from 'vue';
 import { message } from 'ant-design-vue';
 import {
-  SyncOutlined,
   GithubOutlined,
   CodeOutlined,
   RadarChartOutlined,
   BugOutlined
 } from '@ant-design/icons-vue';
-import { getRepoList, getScanTasks, getDastTasks } from '../api';
+import { getRepoList, getScanTasks } from '../api/sast';
+import { getDastTasks } from '../api/dast';
 
 const repoCount = ref(0);
 const sastTaskCount = ref(0);
@@ -90,16 +90,6 @@ const sastVulnCount = ref(0);
 const dastTaskCount = ref(0);
 const dastOpenPorts = ref(0);
 const dastFindingsCount = ref(0);
-
-const recentDastTasks = ref<any[]>([]);
-
-const dastColumns = [
-  { title: '任务 ID', dataIndex: 'task_id', key: 'task_id', width: 220, ellipsis: true },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 120 },
-  { title: '目标进度', key: 'progress', width: 140 },
-  { title: '开放端口数', dataIndex: 'open_ports', key: 'open_ports', width: 120 },
-  { title: '安全漏洞数', dataIndex: 'findings', key: 'findings', width: 120 },
-];
 
 const totalFindings = computed(() => {
   return sastVulnCount.value + dastFindingsCount.value;
@@ -120,8 +110,6 @@ const refreshAll = async () => {
     dastTaskCount.value = dastTasks.length;
     dastOpenPorts.value = dastTasks.reduce((sum: number, task: any) => sum + (task.open_ports || 0), 0);
     dastFindingsCount.value = dastTasks.reduce((sum: number, task: any) => sum + (task.findings || 0), 0);
-    recentDastTasks.value = dastTasks.slice(0, 5);
-
     message.success('数据已同步完成');
   } catch (err) {
     message.error('同步态势数据失败');

@@ -3,7 +3,6 @@ package scanner
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"devsecops/internal/config"
+	"devsecops/pkg/logger"
 )
 
 type GitManager struct {
@@ -70,7 +70,7 @@ func (g *GitManager) CloneRepo(ctx context.Context, repoURL, branch, taskID stri
 			return "", fmt.Errorf("仓库认证失败：无法访问 %s\n如果是私有仓库，请在仓库配置中将 Auth Type 设为 token 并填入有效的 Personal Access Token\n原始错误: %s", repoURL, errMsg)
 		}
 
-		log.Printf("[GitManager] 克隆 %s 失败 (尝试 %d/%d): %v, 输出: %s", repoURL, attempt, maxRetries, err, errMsg)
+		logger.SAST("Git", "克隆 %s 失败 (尝试 %d/%d): %v, 输出: %s", repoURL, attempt, maxRetries, err, errMsg)
 		time.Sleep(time.Duration(attempt*2) * time.Second)
 	}
 
@@ -147,7 +147,7 @@ func (c *CodeQLRunner) Analyze(ctx context.Context, taskID, dbDir, language, que
 		if err := os.WriteFile(qlsPath, []byte(qlsContent), 0644); err != nil {
 			return "", fmt.Errorf("failed to write dynamic qls: %w", err)
 		}
-		log.Printf("[CodeQL] Generated dynamic query suite for task %s at %s with content:\n%s", taskID, qlsPath, qlsContent)
+		logger.SAST("CodeQL", "Generated dynamic query suite for task %s at %s with content:\n%s", taskID, qlsPath, qlsContent)
 		targets = []string{qlsPath}
 	}
 
@@ -165,12 +165,12 @@ func (c *CodeQLRunner) Analyze(ctx context.Context, taskID, dbDir, language, que
 	)
 
 	cmd := exec.CommandContext(ctx, c.codeqlPath, args...)
-	log.Printf("[CodeQL] %s %v", c.codeqlPath, args)
+	logger.SAST("CodeQL", "%s %v", c.codeqlPath, args)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("codeql database analyze failed: %w\noutput: %s", err, string(output))
 	}
-	log.Printf("[Task %s] CodeQL 分析完成，结果文件: %s", taskID, outputFile)
+	logger.SAST("CodeQL", "Task %s CodeQL 分析完成，结果文件: %s", taskID, outputFile)
 
 	return outputFile, nil
 }

@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"devsecops/internal/model"
+	"devsecops/internal/sast/async"
 	sastModel "devsecops/internal/sast/model"
 )
 
@@ -158,6 +159,17 @@ func (s *RepoService) Update(id uint, req *sastModel.UpdateRepoRequest) (*sastMo
 }
 
 func (s *RepoService) Delete(id uint) error {
+	// 1. 主动终止该仓库旗下所有处于排队或运行中的扫描任务
+	var activeTaskIDs []uint
+	s.db.Model(&sastModel.ScanTask{}).
+		Where("repo_id = ? AND status IN ?", id, []string{string(sastModel.TaskStatusPending), string(sastModel.TaskStatusRunning)}).
+		Pluck("id", &activeTaskIDs)
+
+	for _, taskID := range activeTaskIDs {
+		async.CancelTask(taskID)
+	}
+
+	// 2. 数据库事务中清理数据
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Unscoped().Where("repo_id = ?", id).Delete(&sastModel.Vulnerability{}).Error; err != nil {
 			return err
@@ -177,6 +189,17 @@ func (s *RepoService) DeleteBatch(ids []uint) error {
 		return nil
 	}
 
+	// 1. 批量主动终止所有相关仓库正在运行或排队中的扫描任务
+	var activeTaskIDs []uint
+	s.db.Model(&sastModel.ScanTask{}).
+		Where("repo_id IN ? AND status IN ?", ids, []string{string(sastModel.TaskStatusPending), string(sastModel.TaskStatusRunning)}).
+		Pluck("id", &activeTaskIDs)
+
+	for _, taskID := range activeTaskIDs {
+		async.CancelTask(taskID)
+	}
+
+	// 2. 数据库事务中清理数据
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Unscoped().Where("repo_id IN ?", ids).Delete(&sastModel.Vulnerability{}).Error; err != nil {
 			return err

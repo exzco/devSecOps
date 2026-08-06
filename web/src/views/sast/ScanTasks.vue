@@ -300,7 +300,7 @@ import {
   triggerScan,
   getRepoList,
   getScanTaskLogs
-} from '../../api';
+} from '../../api/sast';
 
 interface ScanTaskRecord {
   id: number;

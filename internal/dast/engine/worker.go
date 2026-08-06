@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"devsecops/internal/config"
-	"devsecops/internal/dast/logger"
-	"devsecops/internal/dast/model"
-	"devsecops/internal/dast/queue"
 	"devsecops/internal/dast/service"
+	dastpkg "devsecops/internal/dast"
+	"devsecops/pkg/logger"
 )
 
 var (
@@ -24,83 +23,90 @@ var (
 	resultFileMu     sync.Mutex
 )
 
-func isTaskCancelled(taskId string) bool {
+type PocDownloader interface {
+	DownloadMatchedPocs(ctx context.Context, scanTags []string) (string, error)
+}
+
+func isTaskCancelled(taskID string) bool {
 	cancelledTasksMu.RLock()
 	defer cancelledTasksMu.RUnlock()
-	return cancelledTasks[taskId]
+	return cancelledTasks[taskID]
 }
 
-func cancelTask(taskId string) {
+func cancelTask(taskID string) {
 	cancelledTasksMu.Lock()
 	defer cancelledTasksMu.Unlock()
-	cancelledTasks[taskId] = true
+	cancelledTasks[taskID] = true
 }
 
-func startControlListener(ctx context.Context, rdb *queue.QueueClient, keys queue.QueueKeys) {
-	pubsub := rdb.Subscribe(ctx, keys.Prefix+":control")
+func startControlListener(ctx context.Context, rdb *service.QueueClient, keys service.QueueKeys) {
+	pubsub := rdb.Subscribe(ctx, keys.ControlChannel())
 	go func() {
 		defer pubsub.Close()
-		ch := pubsub.Channel()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case msg, ok := <-ch:
+			case message, ok := <-pubsub.Channel():
 				if !ok {
 					return
 				}
-				taskId := strings.TrimSpace(msg.Payload)
-				if taskId != "" {
-					cancelTask(taskId)
-					logger.Printf("[control] DAST Task %s cancellation received. Marking as stopped.\n", taskId)
-					_ = rdb.HSet(ctx, keys.StatusKey(taskId), "status", "stopped")
+				taskID := strings.TrimSpace(message.Payload)
+				if taskID == "" {
+					continue
 				}
+				cancelTask(taskID)
+				logger.DAST("Control", "task %s cancellation received", taskID)
+				_ = rdb.HSet(ctx, keys.StatusKey(taskID), "status", "stopped")
 			}
 		}
 	}()
 }
 
-func saveResult(taskId, entryType string, data interface{}) {
+func saveResult(resultDir, taskID, entryType string, data interface{}) {
 	resultFileMu.Lock()
 	defer resultFileMu.Unlock()
 
-	_ = os.MkdirAll("result", 0755)
+	if resultDir == "" {
+		resultDir = filepath.Join(".", "result", "dast")
+	}
+	_ = os.MkdirAll(resultDir, 0755)
 
 	entry := struct {
-		TaskId    string      `json:"taskId"`
+		TaskID    string      `json:"taskId"`
 		Type      string      `json:"type"`
 		Timestamp string      `json:"timestamp"`
 		Data      interface{} `json:"data"`
 	}{
-		TaskId:    taskId,
+		TaskID:    taskID,
 		Type:      entryType,
 		Timestamp: time.Now().Format(time.RFC3339),
 		Data:      data,
 	}
 
-	b, err := json.MarshalIndent(entry, "", "  ")
+	payload, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
-		logger.Printf("[result-save] marshal failed: %v\n", err)
+		logger.DAST("ResultSave", "marshal failed: %v", err)
 		return
 	}
 
-	f, err := os.OpenFile(filepath.Join("result", "result.json"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(filepath.Join(resultDir, "result.json"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		logger.Printf("[result-save] open file failed: %v\n", err)
+		logger.DAST("ResultSave", "open file failed: %v", err)
 		return
 	}
-	defer f.Close()
+	defer file.Close()
 
-	_, _ = f.Write(append(b, []byte("\n\n")...))
+	_, _ = file.Write(append(payload, []byte("\n\n")...))
 }
 
-func RunPortWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient, keys queue.QueueKeys) {
-	logger.Printf("[port-worker] started, waiting for jobs on %s ...\n", keys.PortJobs())
+func RunPortWorker(ctx context.Context, cfg *config.Config, rdb *service.QueueClient, keys service.QueueKeys) {
+	logger.DAST("PortWorker", "started, waiting for jobs on %s ...", keys.PortJobs())
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Printf("[port-worker] shutting down\n")
+			logger.DAST("PortWorker", "shutting down")
 			return
 		default:
 		}
@@ -110,82 +116,65 @@ func RunPortWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClie
 			if ctx.Err() != nil {
 				return
 			}
-			logger.Printf("[port-worker] blpop error: %v\n", err)
-			time.Sleep(1 * time.Second)
+			logger.DAST("PortWorker", "blpop error: %v", err)
+			time.Sleep(time.Second)
 			continue
 		}
 
-		var job model.PortJob
+		var job dastpkg.PortJob
 		if err := json.Unmarshal([]byte(raw), &job); err != nil {
-			logger.Printf("[port-worker] invalid job: %v\n", err)
+			logger.DAST("PortWorker", "invalid job: %v", err)
 			continue
 		}
-
 		if isTaskCancelled(job.TaskId) {
-			logger.Printf("[port-worker] skipped job for cancelled taskId=%s\n", job.TaskId)
 			continue
 		}
 
-		logger.Printf("[port-worker] scanning taskId=%s ip=%s\n", job.TaskId, job.IP)
-
-		startTime := time.Now()
+		start := time.Now()
 		openPorts, err := ScanIP(ctx, job.IP, job.Ports, cfg.Dast)
-		duration := time.Since(startTime)
+		duration := time.Since(start)
 		if err != nil {
-			logger.Printf("[port-worker] scan failed ip=%s err=%v, cost=%s\n", job.IP, err, duration)
+			logger.DAST("PortWorker", "scan failed ip=%s err=%v cost=%s", job.IP, err, duration)
 		}
 
 		scanHost := job.IP
-		if h, _, err := net.SplitHostPort(job.IP); err == nil {
-			scanHost = h
+		if host, _, splitErr := net.SplitHostPort(job.IP); splitErr == nil {
+			scanHost = host
 		}
 
 		for _, port := range openPorts {
-			fpJob := model.FpJob{
-				TaskId: job.TaskId,
-				Host:   scanHost,
-				Port:   port,
-			}
-			data, _ := json.Marshal(fpJob)
-			_ = rdb.Push(ctx, keys.FpJobs(), string(data))
+			payload, _ := json.Marshal(dastpkg.FpJob{TaskId: job.TaskId, Host: scanHost, Port: port})
+			_ = rdb.Push(ctx, keys.FpJobs(), string(payload))
 		}
 
 		if len(openPorts) == 0 {
-			// 没有开放端口，直接存入资产
-			asset := model.DastAsset{
+			asset, _ := json.Marshal(dastpkg.DastAsset{
 				Host:      scanHost,
 				Port:      0,
 				Proto:     "tcp",
-				Service:   "无 (所有扫描端口关闭/过滤)",
+				Service:   "unknown",
 				Timestamp: time.Now().Format(time.RFC3339),
-			}
-			b, _ := json.Marshal(asset)
-			_ = rdb.Push(ctx, keys.AssetsKey(job.TaskId), string(b))
+			})
+			_ = rdb.Push(ctx, keys.AssetsKey(job.TaskId), string(asset))
 		}
 
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "scanned_ips", 1)
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "open_ports", int64(len(openPorts)))
 		checkTaskCompletion(ctx, rdb, keys, job.TaskId)
-		logger.Printf("[port-worker] done ip=%s open=%d ports, pushed to %s, cost=%s\n",
-			job.IP, len(openPorts), keys.FpJobs(), duration)
-
-		saveResult(job.TaskId, "port_scan", struct {
-			IP    string `json:"ip"`
-			Ports []int  `json:"ports"`
-		}{
-			IP:    scanHost,
-			Ports: openPorts,
+		saveResult(cfg.Dast.ResultDir, job.TaskId, "port_scan", map[string]interface{}{
+			"ip":    scanHost,
+			"ports": openPorts,
 		})
 	}
 }
 
-func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient, keys queue.QueueKeys) {
-	logger.Printf("[fp-worker] started, waiting for jobs on %s ...\n", keys.FpJobs())
+func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *service.QueueClient, keys service.QueueKeys) {
+	logger.DAST("FpWorker", "started, waiting for jobs on %s ...", keys.FpJobs())
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Printf("[fp-worker] shutting down\n")
+			logger.DAST("FpWorker", "shutting down")
 			return
 		default:
 		}
@@ -195,78 +184,54 @@ func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient
 			if ctx.Err() != nil {
 				return
 			}
-			logger.Printf("[fp-worker] blpop error: %v\n", err)
-			time.Sleep(1 * time.Second)
+			logger.DAST("FpWorker", "blpop error: %v", err)
+			time.Sleep(time.Second)
 			continue
 		}
 
-		var job model.FpJob
+		var job dastpkg.FpJob
 		if err := json.Unmarshal([]byte(raw), &job); err != nil {
-			logger.Printf("[fp-worker] invalid job: %v\n", err)
+			logger.DAST("FpWorker", "invalid job: %v", err)
 			continue
 		}
-
 		if isTaskCancelled(job.TaskId) {
-			logger.Printf("[fp-worker] skipped job for cancelled taskId=%s\n", job.TaskId)
 			continue
 		}
 
-		logger.Printf("[fp-worker] probing taskId=%s host=%s port=%d\n", job.TaskId, job.Host, job.Port)
-
-		startTime := time.Now()
-
-		// ── Step 1: 协议嗅探分流 ─────────────────────────────────────────────
-		isWeb, isTLS := SniffAndRoute(ctx, job.Host, job.Port)
-
+		start := time.Now()
 		var result ProbeResult
-		var fpErr error
+		var probeErr error
 
+		isWeb, isTLS := SniffAndRoute(ctx, job.Host, job.Port)
 		if isWeb {
-			// ── Step 2a: Web 流 → httpx 风格采集 + wappalyzergo 识别 ────────
-			result, fpErr = WebFingerprint(ctx, job.Host, job.Port, isTLS)
-			if fpErr != nil || len(result.Tags) == 0 {
-				logger.Printf("[fp-worker] WebFingerprint insufficient on %s:%d (err=%v), switching to ActiveProbe\n",
-					job.Host, job.Port, fpErr)
-				// ── Step 3a: CDN/无特征 → 主动试探 + HTTP 降级盲测 ──────────
+			result, probeErr = WebFingerprint(ctx, job.Host, job.Port, isTLS)
+			if probeErr != nil || len(result.Tags) == 0 {
 				result, _ = ActiveProbe(ctx, job.Host, job.Port)
 				_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_active_probe", 1)
 			}
 		} else {
-			// ── Step 2b: 二进制服务流 → 精准 Nmap 指纹（无退化链）──────────
-			result, fpErr = NmapBinaryProbe(ctx, job.Host, job.Port)
-			if fpErr != nil || result.Service == "" {
-				logger.Printf("[fp-worker] NmapBinaryProbe failed on %s:%d (err=%v), switching to ActiveProbe\n",
-					job.Host, job.Port, fpErr)
-				// ── Step 3b: Nmap 无结果 → 主动试探兜底 ────────────────────
+			result, probeErr = NmapBinaryProbe(ctx, job.Host, job.Port)
+			if probeErr != nil || result.Service == "" {
 				result, _ = ActiveProbe(ctx, job.Host, job.Port)
 				_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_active_probe", 1)
 			}
 		}
 
-		duration := time.Since(startTime)
-
-		// 最终 tags 为空时使用全局兜底（极少触发）
 		if len(result.Tags) == 0 {
 			result.Tags = FallbackTags
 			result.Source = "fallback"
-			logger.Printf("[fp-worker] all probes returned empty tags for %s:%d, using global fallback\n",
-				job.Host, job.Port)
 			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_fallback", 1)
 		}
 
-		pocJob := model.PocJob{
+		payload, _ := json.Marshal(dastpkg.PocJob{
 			TaskId: job.TaskId,
 			Target: result.URL,
 			Proto:  result.Proto,
 			Tags:   result.Tags,
-			Retry:  0,
-		}
+		})
+		_ = rdb.Push(ctx, keys.PocJobs(), string(payload))
 
-		data, _ := json.Marshal(pocJob)
-		_ = rdb.Push(ctx, keys.PocJobs(), string(data))
-
-		// 将扫描发现的开放端口及服务指纹推入 Redis 列表中
-		asset := model.DastAsset{
+		asset, _ := json.Marshal(dastpkg.DastAsset{
 			Host:        job.Host,
 			Port:        job.Port,
 			Proto:       result.Proto,
@@ -276,61 +241,41 @@ func RunFpWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient
 			CPEs:        result.CPEs,
 			RawResponse: result.RawResponse,
 			Timestamp:   time.Now().Format(time.RFC3339),
-		}
-		if asset.Service == "" {
-			asset.Service = "unknown"
-		}
-		assetBytes, _ := json.Marshal(asset)
-		_ = rdb.Push(ctx, keys.AssetsKey(job.TaskId), string(assetBytes))
+		})
+		_ = rdb.Push(ctx, keys.AssetsKey(job.TaskId), string(asset))
 
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "fp_done", 1)
 		checkTaskCompletion(ctx, rdb, keys, job.TaskId)
-		logger.Printf("[fp-worker] done host=%s:%d → target=%s source=%s tags=%v, cost=%s\n",
-			job.Host, job.Port, result.URL, result.Source, result.Tags, duration)
+		logger.DAST("FpWorker", "done host=%s:%d source=%s cost=%s", job.Host, job.Port, result.Source, time.Since(start))
 
-		// 使用 Source 字段判断指纹质量，active_probe/fallback 时记录原始响应辅助排查
-		isFallback := result.Source == "active_probe" || result.Source == "fallback"
-		if isFallback {
-			saveResult(job.TaskId, "fingerprint", struct {
-				Host     string   `json:"host"`
-				Port     int      `json:"port"`
-				Proto    string   `json:"proto"`
-				Source   string   `json:"source"`
-				Tags     []string `json:"tags"`
-				Response string   `json:"response"`
-			}{
-				Host:     job.Host,
-				Port:     job.Port,
-				Proto:    result.Proto,
-				Source:   result.Source,
-				Tags:     result.Tags,
-				Response: result.RawResponse,
+		if result.Source == "active_probe" || result.Source == "fallback" {
+			saveResult(cfg.Dast.ResultDir, job.TaskId, "fingerprint", map[string]interface{}{
+				"host":     job.Host,
+				"port":     job.Port,
+				"proto":    result.Proto,
+				"source":   result.Source,
+				"tags":     result.Tags,
+				"response": result.RawResponse,
 			})
 		} else {
-			saveResult(job.TaskId, "fingerprint", struct {
-				Host   string   `json:"host"`
-				Port   int      `json:"port"`
-				Proto  string   `json:"proto"`
-				Source string   `json:"source"`
-				Tags   []string `json:"tags"`
-			}{
-				Host:   job.Host,
-				Port:   job.Port,
-				Proto:  result.Proto,
-				Source: result.Source,
-				Tags:   result.Tags,
+			saveResult(cfg.Dast.ResultDir, job.TaskId, "fingerprint", map[string]interface{}{
+				"host":   job.Host,
+				"port":   job.Port,
+				"proto":  result.Proto,
+				"source": result.Source,
+				"tags":   result.Tags,
 			})
 		}
 	}
 }
 
-func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClient, keys queue.QueueKeys, pocSvc *service.PocService) {
-	logger.Printf("[poc-worker] started, waiting for jobs on %s ...\n", keys.PocJobs())
+func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *service.QueueClient, keys service.QueueKeys, pocSvc PocDownloader) {
+	logger.DAST("PocWorker", "started, waiting for jobs on %s ...", keys.PocJobs())
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Printf("[poc-worker] shutting down\n")
+			logger.DAST("PocWorker", "shutting down")
 			return
 		default:
 		}
@@ -340,100 +285,67 @@ func RunPocWorker(ctx context.Context, cfg *config.Config, rdb *queue.QueueClien
 			if ctx.Err() != nil {
 				return
 			}
-			logger.Printf("[poc-worker] blpop error: %v\n", err)
-			time.Sleep(1 * time.Second)
+			logger.DAST("PocWorker", "blpop error: %v", err)
+			time.Sleep(time.Second)
 			continue
 		}
 
-		var job model.PocJob
+		var job dastpkg.PocJob
 		if err := json.Unmarshal([]byte(raw), &job); err != nil {
-			logger.Printf("[poc-worker] invalid job: %v\n", err)
+			logger.DAST("PocWorker", "invalid job: %v", err)
 			continue
 		}
-
 		if isTaskCancelled(job.TaskId) {
-			logger.Printf("[poc-worker] skipped job for cancelled taskId=%s\n", job.TaskId)
 			continue
 		}
 
-		logger.Printf("[poc-worker] scanning taskId=%s target=%s tags=%v\n",
-			job.TaskId, job.Target, job.Tags)
-
-		startTime := time.Now()
-
-		// 1. 从 MinIO 动态拉取该指纹标签对应的 PoC 模板到本地临时目录
-		tempPocDir, downloadErr := pocSvc.DownloadMatchedPocs(ctx, job.Tags)
-		if downloadErr != nil {
-			logger.Printf("[poc-worker] 从 MinIO 匹配下载 PoC 失败 target=%s: %v\n", job.Target, downloadErr)
+		start := time.Now()
+		tempPocDir, err := pocSvc.DownloadMatchedPocs(ctx, job.Tags)
+		if err != nil || tempPocDir == "" {
 			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
 			checkTaskCompletion(ctx, rdb, keys, job.TaskId)
 			continue
 		}
 
-		// 2. 若没有匹配到任何 PoC，则直接跳过
-		if tempPocDir == "" {
-			logger.Printf("[poc-worker] 未匹配到 target=%s 标签 %v 的任何 PoC 模板，跳过检测\n", job.Target, job.Tags)
-			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
-			checkTaskCompletion(ctx, rdb, keys, job.TaskId)
-			continue
-		}
-
-		// 3. 执行 nuclei 扫描
-		findings, err := ScanWithTags(ctx, job.Target, job.Tags, tempPocDir)
-		duration := time.Since(startTime)
-
-		// 4. 扫描完成后立即清理本地临时目录
+		findings, scanErr := ScanWithTags(ctx, job.Target, job.Tags, tempPocDir)
 		_ = os.RemoveAll(tempPocDir)
-
-		if err != nil {
-			logger.Printf("[poc-worker] scan failed target=%s: %v, cost=%s\n",
-				job.Target, err, duration)
+		if scanErr != nil {
+			logger.DAST("PocWorker", "scan failed target=%s err=%v cost=%s", job.Target, scanErr, time.Since(start))
 			_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
 			checkTaskCompletion(ctx, rdb, keys, job.TaskId)
 			continue
 		}
 
-		for _, f := range findings {
-			b, _ := json.Marshal(f)
-			_ = rdb.Push(ctx, keys.ResultsKey(job.TaskId), string(b))
-			logger.Printf("[poc-worker] FINDING taskId=%s template=%s severity=%s matched=%s\n",
-				job.TaskId, f.TemplateID, f.Severity, f.Matched)
-			saveResult(job.TaskId, "poc_finding", f)
+		for _, finding := range findings {
+			payload, _ := json.Marshal(finding)
+			_ = rdb.Push(ctx, keys.ResultsKey(job.TaskId), string(payload))
+			saveResult(cfg.Dast.ResultDir, job.TaskId, "poc_finding", finding)
 		}
 
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "poc_done", 1)
 		_ = rdb.HIncrBy(ctx, keys.StatusKey(job.TaskId), "findings", int64(len(findings)))
 		checkTaskCompletion(ctx, rdb, keys, job.TaskId)
-		logger.Printf("[poc-worker] done target=%s findings=%d cost=%s\n",
-			job.Target, len(findings), duration)
-
-		saveResult(job.TaskId, "poc_scan", struct {
-			Target   string   `json:"target"`
-			Tags     []string `json:"tags"`
-			Findings int      `json:"findings"`
-		}{
-			Target:   job.Target,
-			Tags:     job.Tags,
-			Findings: len(findings),
+		saveResult(cfg.Dast.ResultDir, job.TaskId, "poc_scan", map[string]interface{}{
+			"target":   job.Target,
+			"tags":     job.Tags,
+			"findings": len(findings),
 		})
 	}
 }
 
-func StartAllDastWorkers(ctx context.Context, cfg *config.Config, pocSvc *service.PocService) {
-	keys := queue.NewQueueKeys(cfg.Dast.QueuePrefix)
-	rdb := queue.NewQueueClient(cfg.Redis, cfg.DastDialTimeout(), cfg.DastReadTimeout())
-
+func StartAllDastWorkers(ctx context.Context, cfg *config.Config, rdb *service.QueueClient, keys service.QueueKeys, pocSvc PocDownloader) {
+	logger.Configure(cfg.Dast.LogDir, cfg.Dast.ConsoleLog)
 	startControlListener(ctx, rdb, keys)
 
 	go RunPortWorker(ctx, cfg, rdb, keys)
 	go RunFpWorker(ctx, cfg, rdb, keys)
 	go RunPocWorker(ctx, cfg, rdb, keys, pocSvc)
 
-	logger.Printf("[DAST] All background workers (PortScan, Fingerprint, NucleiPOC) started.\n")
+	logger.DAST("Init", "background workers started")
 }
 
-func checkTaskCompletion(ctx context.Context, rdb *queue.QueueClient, keys queue.QueueKeys, taskId string) {
-	statusMap, err := rdb.Rdb.HGetAll(ctx, keys.StatusKey(taskId)).Result()
+func checkTaskCompletion(ctx context.Context, rdb *service.QueueClient, keys service.QueueKeys, taskID string) {
+	statusMap, err := rdb.Rdb.HGetAll(ctx, keys.StatusKey(taskID)).Result()
 	if err != nil || len(statusMap) == 0 {
 		return
 	}
@@ -449,20 +361,7 @@ func checkTaskCompletion(ctx context.Context, rdb *queue.QueueClient, keys queue
 	fpDone, _ := strconv.Atoi(statusMap["fp_done"])
 	pocDone, _ := strconv.Atoi(statusMap["poc_done"])
 
-	logger.Printf("[worker-monitor] Debug Task %s: scanned=%d/%d, open_ports=%d, fp_done=%d, poc_done=%d, status=%s\n",
-		taskId, scannedIPs, totalIPs, openPorts, fpDone, pocDone, currentStatus)
-
-	isCompleted := false
-	if scannedIPs >= totalIPs {
-		if openPorts == 0 {
-			isCompleted = true
-		} else if fpDone >= openPorts && pocDone >= fpDone {
-			isCompleted = true
-		}
-	}
-
-	if isCompleted {
-		_ = rdb.Rdb.HSet(ctx, keys.StatusKey(taskId), "status", "success")
-		logger.Printf("[worker-monitor] DAST Task %s marked as success (completed).\n", taskId)
+	if scannedIPs >= totalIPs && (openPorts == 0 || (fpDone >= openPorts && pocDone >= fpDone)) {
+		_ = rdb.Rdb.HSet(ctx, keys.StatusKey(taskID), "status", "success")
 	}
 }

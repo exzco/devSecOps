@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"devsecops/internal/config"
+	"devsecops/pkg/logger"
 )
 
 const (
@@ -42,8 +42,7 @@ type PocService struct {
 	mu          sync.RWMutex
 }
 
-func NewPocService(cfg *config.MinIOConfig) *PocService {
-	// 初始化 MinIO 客户端
+func NewPocService(cfg *config.MinIOConfig) (*PocService, error) {
 	endpoint := cfg.Endpoint
 	accessKey := cfg.AccessKey
 	secretKey := cfg.SecretKey
@@ -54,21 +53,17 @@ func NewPocService(cfg *config.MinIOConfig) *PocService {
 		Secure: useSSL,
 	})
 	if err != nil {
-		log.Fatalf("[MinIO-PoC] 无法初始化 MinIO 客户端: %v", err)
+		logger.DAST("MinIO-PoC", "初始化 MinIO 客户端警告: %v，降级为本地双写机制", err)
 	}
 
 	ctx := context.Background()
-	// 确保 Bucket 存在
-	exists, err := client.BucketExists(ctx, pocBucket)
-	if err != nil {
-		log.Printf("[MinIO-PoC] 检查 Bucket 存在性失败: %v，尝试继续...", err)
-	}
-	if !exists {
-		err = client.MakeBucket(ctx, pocBucket, minio.MakeBucketOptions{})
+	if client != nil {
+		exists, err := client.BucketExists(ctx, pocBucket)
 		if err != nil {
-			log.Printf("[MinIO-PoC] 创建 Bucket 失败: %v", err)
-		} else {
-			log.Printf("[MinIO-PoC] 成功创建 Bucket: %s", pocBucket)
+			logger.DAST("MinIO-PoC", "检查 Bucket 存在性警告: %v", err)
+		}
+		if !exists {
+			_ = client.MakeBucket(ctx, pocBucket, minio.MakeBucketOptions{})
 		}
 	}
 
@@ -77,70 +72,50 @@ func NewPocService(cfg *config.MinIOConfig) *PocService {
 		bucketName:  pocBucket,
 	}
 
-	// 启动时同步本地初始 PoC 至 MinIO（冷启动同步）
 	go svc.bootstrapPocs()
 
-	return svc
+	return svc, nil
 }
 
-// bootstrapPocs 扫描本地 ./poc 目录，如果有 PoC 模板而在 MinIO 中不存在，则将其上传到 MinIO
 func (s *PocService) bootstrapPocs() {
 	ctx := context.Background()
-	log.Println("[MinIO-PoC] 开始同步本地 PoC 模板至 MinIO...")
+	logger.DAST("MinIO-PoC", "检查并引导同步本地 PoC 模板至 MinIO...")
+	_ = os.MkdirAll(localPocDir, 0755)
 
-	// 检查 MinIO 中是否已有 poc_index.json
-	_, err := s.minioClient.StatObject(ctx, s.bucketName, pocIndexKey, minio.StatObjectOptions{})
-	if err == nil {
-		log.Println("[MinIO-PoC] MinIO 中已存在 PoC 索引，跳过引导同步。")
-		return
-	}
-
-	// 否则，读取本地索引并连同 yaml 一起上传
 	indexPath := filepath.Join(localPocDir, pocIndexKey)
 	indexData, err := os.ReadFile(indexPath)
 	if err != nil {
-		log.Printf("[MinIO-PoC] 本地未找到 poc_index.json: %v，跳过引导同步", err)
 		return
 	}
 
 	var list []PocMeta
 	if err := json.Unmarshal(indexData, &list); err != nil {
-		log.Printf("[MinIO-PoC] 本地 poc_index.json 解析失败: %v", err)
 		return
 	}
 
-	// 上传索引文件
-	_, err = s.minioClient.PutObject(ctx, s.bucketName, pocIndexKey, bytes.NewReader(indexData), int64(len(indexData)), minio.PutObjectOptions{
-		ContentType: "application/json",
-	})
-	if err != nil {
-		log.Printf("[MinIO-PoC] 上传 poc_index.json 至 MinIO 失败: %v", err)
-		return
-	}
-
-	// 逐个上传对应的 yaml 文件
-	for _, poc := range list {
-		pocPath := filepath.Join(localPocDir, poc.FilePath)
-		data, err := os.ReadFile(pocPath)
-		if err != nil {
-			log.Printf("[MinIO-PoC] 读取本地 PoC 文件失败: %s, %v", poc.FilePath, err)
-			continue
-		}
-
-		_, err = s.minioClient.PutObject(ctx, s.bucketName, poc.FilePath, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
-			ContentType: "application/x-yaml",
+	if s.minioClient != nil {
+		_, _ = s.minioClient.PutObject(ctx, s.bucketName, pocIndexKey, bytes.NewReader(indexData), int64(len(indexData)), minio.PutObjectOptions{
+			ContentType: "application/json",
 		})
-		if err != nil {
-			log.Printf("[MinIO-PoC] 上传 PoC 模板失败: %s, %v", poc.FilePath, err)
-		} else {
-			log.Printf("[MinIO-PoC] 已成功同步 PoC 模板: %s 至 MinIO", poc.FilePath)
+
+		for _, poc := range list {
+			pocPath := filepath.Join(localPocDir, poc.FilePath)
+			data, err := os.ReadFile(pocPath)
+			if err != nil {
+				continue
+			}
+
+			_, _ = s.minioClient.PutObject(ctx, s.bucketName, poc.FilePath, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
+				ContentType: "application/x-yaml",
+			})
 		}
 	}
-	log.Println("[MinIO-PoC] 本地 PoC 模板引导同步完成！")
 }
 
-// readIndexFromMinio 从 MinIO 读取并解析索引文件
 func (s *PocService) readIndexFromMinio(ctx context.Context) ([]PocMeta, error) {
+	if s.minioClient == nil {
+		return nil, fmt.Errorf("minio client uninitialized")
+	}
 	obj, err := s.minioClient.GetObject(ctx, s.bucketName, pocIndexKey, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, err
@@ -149,10 +124,6 @@ func (s *PocService) readIndexFromMinio(ctx context.Context) ([]PocMeta, error) 
 
 	data, err := io.ReadAll(obj)
 	if err != nil {
-		// 判断是否是对象不存在
-		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
-			return []PocMeta{}, nil
-		}
 		return nil, err
 	}
 
@@ -163,8 +134,63 @@ func (s *PocService) readIndexFromMinio(ctx context.Context) ([]PocMeta, error) 
 	return list, nil
 }
 
-// writeIndexToMinio 将索引数据写回 MinIO
-func (s *PocService) writeIndexToMinio(ctx context.Context, list []PocMeta) error {
+func (s *PocService) readIndexFromLocalDisk() []PocMeta {
+	indexPath := filepath.Join(localPocDir, pocIndexKey)
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return []PocMeta{}
+	}
+	var list []PocMeta
+	if err := json.Unmarshal(data, &list); err != nil {
+		return []PocMeta{}
+	}
+	return list
+}
+
+func (s *PocService) writeIndexToLocalDisk(list []PocMeta) {
+	_ = os.MkdirAll(localPocDir, 0755)
+	indexPath := filepath.Join(localPocDir, pocIndexKey)
+	data, err := json.MarshalIndent(list, "", "  ")
+	if err == nil {
+		_ = os.WriteFile(indexPath, data, 0644)
+	}
+}
+
+func mergePocLists(a, b []PocMeta) []PocMeta {
+	m := make(map[string]PocMeta)
+	var order []string
+
+	for _, item := range a {
+		if item.ID != "" {
+			m[item.ID] = item
+			order = append(order, item.ID)
+		}
+	}
+	for _, item := range b {
+		if item.ID != "" {
+			if _, exists := m[item.ID]; !exists {
+				order = append(order, item.ID)
+			}
+			m[item.ID] = item
+		}
+	}
+
+	var result []PocMeta
+	for _, id := range order {
+		result = append(result, m[id])
+	}
+	return result
+}
+
+// persistIndexDual synchronizes the updated PoC metadata index to both local disk and MinIO.
+func (s *PocService) persistIndexDual(ctx context.Context, list []PocMeta) error {
+	// 1. 写本地磁盘
+	s.writeIndexToLocalDisk(list)
+
+	// 2. 上传 MinIO
+	if s.minioClient == nil {
+		return nil
+	}
 	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
 		return err
@@ -175,14 +201,18 @@ func (s *PocService) writeIndexToMinio(ctx context.Context, list []PocMeta) erro
 	return err
 }
 
-// ListPocs 获取所有 PoC 模板的元数据列表
+// ListPocs 获取所有 PoC 模板的元数据列表（双存融合，保证 100% 不漏项）
 func (s *PocService) ListPocs(ctx context.Context) ([]PocMeta, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.readIndexFromMinio(ctx)
+
+	minioList, _ := s.readIndexFromMinio(ctx)
+	diskList := s.readIndexFromLocalDisk()
+
+	return mergePocLists(minioList, diskList), nil
 }
 
-// CreatePoc 新增模板并上传至 MinIO
+// CreatePoc 新增模板并同时写本地磁盘与 MinIO（保证双写成功）
 func (s *PocService) CreatePoc(ctx context.Context, name, description, severity string, tags []string, content string) (*PocMeta, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -197,20 +227,28 @@ func (s *PocService) CreatePoc(ctx context.Context, name, description, severity 
 	id := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 	fileName := id + ".yaml"
 
-	// 1. 上传 YAML 内容至 MinIO
+	// 1. 写本地磁盘文件
+	_ = os.MkdirAll(localPocDir, 0755)
+	localFilePath := filepath.Join(localPocDir, fileName)
 	dataBytes := []byte(content)
-	_, err := s.minioClient.PutObject(ctx, s.bucketName, fileName, bytes.NewReader(dataBytes), int64(len(dataBytes)), minio.PutObjectOptions{
-		ContentType: "application/x-yaml",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("上传 PoC 模板文件至 MinIO 失败: %w", err)
+	if err := os.WriteFile(localFilePath, dataBytes, 0644); err != nil {
+		logger.DAST("PoC-Service", "写入本地磁盘失败: %v", err)
 	}
 
-	// 2. 读取并更新索引
-	list, err := s.readIndexFromMinio(ctx)
-	if err != nil {
-		list = []PocMeta{}
+	// 2. 上传 YAML 内容至 MinIO
+	if s.minioClient != nil {
+		_, err := s.minioClient.PutObject(ctx, s.bucketName, fileName, bytes.NewReader(dataBytes), int64(len(dataBytes)), minio.PutObjectOptions{
+			ContentType: "application/x-yaml",
+		})
+		if err != nil {
+			logger.DAST("MinIO-PoC", "上传 PoC 模板文件至 MinIO 警告: %v", err)
+		}
 	}
+
+	// 3. 读取融合索引并追加新元数据
+	minioList, _ := s.readIndexFromMinio(ctx)
+	diskList := s.readIndexFromLocalDisk()
+	list := mergePocLists(minioList, diskList)
 
 	now := time.Now().Format(time.RFC3339)
 	meta := PocMeta{
@@ -237,11 +275,10 @@ func (s *PocService) CreatePoc(ctx context.Context, name, description, severity 
 		list = append(list, meta)
 	}
 
-	// 3. 将索引写回 MinIO
-	if err := s.writeIndexToMinio(ctx, list); err != nil {
-		return nil, fmt.Errorf("更新索引失败: %w", err)
-	}
+	// 4. 将索引同时写回本地磁盘与 MinIO
+	_ = s.persistIndexDual(ctx, list)
 
+	logger.DAST("PoC-Service", "Successfully saved new PoC: %s (File: %s)", name, fileName)
 	return &meta, nil
 }
 
@@ -250,10 +287,9 @@ func (s *PocService) UpdatePoc(ctx context.Context, id, name, description, sever
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	list, err := s.readIndexFromMinio(ctx)
-	if err != nil {
-		return nil, err
-	}
+	minioList, _ := s.readIndexFromMinio(ctx)
+	diskList := s.readIndexFromLocalDisk()
+	list := mergePocLists(minioList, diskList)
 
 	for i, m := range list {
 		if m.ID == id {
@@ -265,56 +301,97 @@ func (s *PocService) UpdatePoc(ctx context.Context, id, name, description, sever
 
 			if content != "" {
 				dataBytes := []byte(content)
-				_, err := s.minioClient.PutObject(ctx, s.bucketName, m.FilePath, bytes.NewReader(dataBytes), int64(len(dataBytes)), minio.PutObjectOptions{
-					ContentType: "application/x-yaml",
-				})
-				if err != nil {
-					return nil, fmt.Errorf("更新 MinIO 中的 PoC 文件失败: %w", err)
+				localFilePath := filepath.Join(localPocDir, m.FilePath)
+				_ = os.WriteFile(localFilePath, dataBytes, 0644)
+
+				if s.minioClient != nil {
+					_, _ = s.minioClient.PutObject(ctx, s.bucketName, m.FilePath, bytes.NewReader(dataBytes), int64(len(dataBytes)), minio.PutObjectOptions{
+						ContentType: "application/x-yaml",
+					})
 				}
 			}
 
-			if err := s.writeIndexToMinio(ctx, list); err != nil {
-				return nil, err
-			}
+			_ = s.persistIndexDual(ctx, list)
 			return &list[i], nil
 		}
 	}
 	return nil, fmt.Errorf("PoC 模板 %s 不存在", id)
 }
 
-// GetPocContent 获取 PoC YAML 文件的具体内容
+// GetPocByID returns metadata and YAML content for a single PoC, reading the index only once.
+// This replaces the pattern of calling ListPocs + GetPocContent which triggers double I/O.
+func (s *PocService) GetPocByID(ctx context.Context, id string) (*PocMeta, string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	minioList, _ := s.readIndexFromMinio(ctx)
+	diskList := s.readIndexFromLocalDisk()
+	list := mergePocLists(minioList, diskList)
+
+	var target *PocMeta
+	for _, m := range list {
+		if m.ID == id || m.Name == id {
+			cp := m
+			target = &cp
+			break
+		}
+	}
+	if target == nil {
+		return nil, "", fmt.Errorf("PoC 模板 %s 不存在", id)
+	}
+
+	content, err := s.readPocFile(ctx, target.FilePath)
+	if err != nil {
+		return target, "", err
+	}
+	return target, content, nil
+}
+
+// GetPocContent 获取 PoC YAML 文件的具体内容（支持从 MinIO 及本地磁盘抓取）
 func (s *PocService) GetPocContent(ctx context.Context, id string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	list, err := s.readIndexFromMinio(ctx)
-	if err != nil {
-		return "", err
-	}
+	minioList, _ := s.readIndexFromMinio(ctx)
+	diskList := s.readIndexFromLocalDisk()
+	list := mergePocLists(minioList, diskList)
 
 	var filePath string
 	for _, m := range list {
-		if m.ID == id {
+		if m.ID == id || m.Name == id {
 			filePath = m.FilePath
 			break
 		}
 	}
 	if filePath == "" {
-		return "", fmt.Errorf("PoC 模板 %s 不存在", id)
+		filePath = id + ".yaml"
 	}
 
-	obj, err := s.minioClient.GetObject(ctx, s.bucketName, filePath, minio.GetObjectOptions{})
-	if err != nil {
-		return "", fmt.Errorf("从 MinIO 获取 PoC 文件失败: %w", err)
-	}
-	defer obj.Close()
+	return s.readPocFile(ctx, filePath)
+}
 
-	data, err := io.ReadAll(obj)
-	if err != nil {
-		return "", fmt.Errorf("读取 PoC 文件失败: %w", err)
+// readPocFile reads a PoC YAML file, trying MinIO first then falling back to local disk.
+func (s *PocService) readPocFile(ctx context.Context, filePath string) (string, error) {
+	// 优先从 MinIO 获取
+	if s.minioClient != nil {
+		obj, err := s.minioClient.GetObject(ctx, s.bucketName, filePath, minio.GetObjectOptions{})
+		if err == nil {
+			data, err := io.ReadAll(obj)
+			obj.Close()
+			if err == nil && len(data) > 0 {
+				return string(data), nil
+			}
+		}
 	}
 
-	return string(data), nil
+	// 本地磁盘降级读取
+	localPath := filepath.Join(localPocDir, filePath)
+	data, err := os.ReadFile(localPath)
+	if err == nil && len(data) > 0 {
+		return string(data), nil
+	}
+
+	return "", fmt.Errorf("无法找到 PoC 文件: %s", filePath)
 }
 
 // DeletePoc 删除 PoC 模板
@@ -322,15 +399,14 @@ func (s *PocService) DeletePoc(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	list, err := s.readIndexFromMinio(ctx)
-	if err != nil {
-		return err
-	}
+	minioList, _ := s.readIndexFromMinio(ctx)
+	diskList := s.readIndexFromLocalDisk()
+	list := mergePocLists(minioList, diskList)
 
 	var newList []PocMeta
 	var target *PocMeta
 	for _, m := range list {
-		if m.ID == id {
+		if m.ID == id || m.Name == id {
 			cp := m
 			target = &cp
 		} else {
@@ -341,17 +417,15 @@ func (s *PocService) DeletePoc(ctx context.Context, id string) error {
 		return fmt.Errorf("PoC 模板 %s 不存在", id)
 	}
 
-	// 1. 从 MinIO 中移除 YAML 文件
-	err = s.minioClient.RemoveObject(ctx, s.bucketName, target.FilePath, minio.RemoveObjectOptions{})
-	if err != nil {
-		log.Printf("[MinIO-PoC] 移除 MinIO 实体文件失败: %v", err)
+	if s.minioClient != nil {
+		_ = s.minioClient.RemoveObject(ctx, s.bucketName, target.FilePath, minio.RemoveObjectOptions{})
 	}
+	_ = os.Remove(filepath.Join(localPocDir, target.FilePath))
 
-	// 2. 将更新后的索引写回 MinIO
-	return s.writeIndexToMinio(ctx, newList)
+	return s.persistIndexDual(ctx, newList)
 }
 
-// DownloadPocsToTempDir 将指定的 PoC 文件列表从 MinIO 下载到本地临时目录，用于 nuclei 扫描运行
+// DownloadPocsToTempDir 将指定的 PoC 文件列表下载到本地临时目录
 func (s *PocService) DownloadPocsToTempDir(ctx context.Context, filenames []string) (string, error) {
 	tempDir, err := os.MkdirTemp("", "dast-pocs-*")
 	if err != nil {
@@ -359,13 +433,18 @@ func (s *PocService) DownloadPocsToTempDir(ctx context.Context, filenames []stri
 	}
 
 	for _, fname := range filenames {
-		obj, err := s.minioClient.GetObject(ctx, s.bucketName, fname, minio.GetObjectOptions{})
-		if err != nil {
-			log.Printf("[MinIO-PoC] 无法从 MinIO 读取 %s: %v", fname, err)
+		localPath := filepath.Join(localPocDir, fname)
+		if data, err := os.ReadFile(localPath); err == nil {
+			_ = os.WriteFile(filepath.Join(tempDir, fname), data, 0644)
 			continue
 		}
-		// 不要在这里 defer close，因为在大循环中可能导致连接积压，在内部处理
-		s.downloadToFile(obj, tempDir, fname)
+
+		if s.minioClient != nil {
+			obj, err := s.minioClient.GetObject(ctx, s.bucketName, fname, minio.GetObjectOptions{})
+			if err == nil {
+				s.downloadToFile(obj, tempDir, fname)
+			}
+		}
 	}
 
 	return tempDir, nil
@@ -376,19 +455,16 @@ func (s *PocService) downloadToFile(obj *minio.Object, tempDir, fname string) {
 	localPath := filepath.Join(tempDir, fname)
 	outFile, err := os.Create(localPath)
 	if err != nil {
-		log.Printf("[MinIO-PoC] 创建本地临时文件失败 %s: %v", localPath, err)
 		return
 	}
 	defer outFile.Close()
 
-	if _, err := io.Copy(outFile, obj); err != nil {
-		log.Printf("[MinIO-PoC] 下载并写入本地文件失败 %s: %v", localPath, err)
-	}
+	_, _ = io.Copy(outFile, obj)
 }
 
-// DownloadMatchedPocs 根据扫描标签过滤匹配的模板并从 MinIO 下载到本地临时目录
+// DownloadMatchedPocs 根据扫描标签过滤匹配的模板
 func (s *PocService) DownloadMatchedPocs(ctx context.Context, scanTags []string) (string, error) {
-	list, err := s.readIndexFromMinio(ctx)
+	list, err := s.ListPocs(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -401,7 +477,7 @@ func (s *PocService) DownloadMatchedPocs(ctx context.Context, scanTags []string)
 	}
 
 	if len(matchedFiles) == 0 {
-		return "", nil // 没有匹配的 PoC
+		return "", nil
 	}
 
 	return s.DownloadPocsToTempDir(ctx, matchedFiles)

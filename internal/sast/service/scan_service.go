@@ -1,29 +1,20 @@
 package service
 
 import (
-	"encoding/json"
-	"fmt"
 	"math"
 
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"devsecops/internal/model"
 	sastModel "devsecops/internal/sast/model"
-	"devsecops/internal/sast/scanner"
 )
 
 type ScanService struct {
-	db     *gorm.DB
-	worker *scanner.ScanWorker
+	db *gorm.DB
 }
 
-func NewScanService(db *gorm.DB, worker *scanner.ScanWorker) *ScanService {
-	return &ScanService{db: db, worker: worker}
-}
-
-func (s *ScanService) GetDB() *gorm.DB {
-	return s.db
+func NewScanService(db *gorm.DB) *ScanService {
+	return &ScanService{db: db}
 }
 
 func (s *ScanService) CreateTask(repoID uint, triggerType, branch, language, querySuite, ruleProfile, rules string, useAIVerification bool) (*sastModel.ScanTask, error) {
@@ -95,54 +86,6 @@ func (s *ScanService) UpdateTaskStatus(taskID uint, status string, updates map[s
 	return s.db.Model(&sastModel.ScanTask{}).Where("id = ?", taskID).Updates(updates).Error
 }
 
-func (s *ScanService) SaveVulnerabilities(taskID, repoID uint, parsed []scanner.ParsedVulnerability) (int, error) {
-	saved := 0
-	repoURL := ""
-	var repo sastModel.Repository
-	if err := s.db.Select("url").First(&repo, repoID).Error; err == nil {
-		repoURL = repo.URL
-	}
-	for _, p := range parsed {
-		dataFlowJSON, _ := json.Marshal(p.DataFlow)
-
-		vuln := &sastModel.Vulnerability{
-			ScanTaskID:  taskID,
-			RepoID:      repoID,
-			RepoURL:     repoURL,
-			RuleID:      p.RuleID,
-			RuleName:    p.RuleName,
-			Severity:    p.Severity,
-			Status:      sastModel.VulnStatusNew,
-			FilePath:    p.FilePath,
-			StartLine:   p.StartLine,
-			EndLine:     p.EndLine,
-			CodeSnippet: p.CodeSnippet,
-			Message:     p.Message,
-			DataFlow:    datatypes.JSON(dataFlowJSON),
-			Fingerprint: p.Fingerprint,
-		}
-
-		result := s.db.Where("repo_id = ? AND fingerprint = ?", repoID, p.Fingerprint).
-			Assign(map[string]interface{}{
-				"scan_task_id": taskID,
-				"repo_url":     repoURL,
-				"code_snippet": p.CodeSnippet,
-				"message":      p.Message,
-				"data_flow":    datatypes.JSON(dataFlowJSON),
-			}).
-			FirstOrCreate(vuln)
-
-		if result.Error != nil {
-			return saved, fmt.Errorf("failed to save vulnerability: %w", result.Error)
-		}
-		saved++
-	}
-
-	s.db.Model(&sastModel.ScanTask{}).Where("id = ?", taskID).Update("vuln_count", saved)
-
-	return saved, nil
-}
-
 func (s *ScanService) ListVulnerabilities(query *sastModel.VulnQuery) (*model.PaginatedResponse, error) {
 	if query.Page < 1 {
 		query.Page = 1
@@ -194,15 +137,7 @@ func (s *ScanService) GetVulnerability(id uint) (*sastModel.Vulnerability, error
 	return &vuln, nil
 }
 
-// ActiveTaskCanceler registry to be set by scheduler package to break import cycle
-var ActiveTaskCanceler func(taskID uint)
-
 func (s *ScanService) DeleteTask(taskID uint) error {
-	// Cancel the task if it is currently running (notified via callback to break import cycle)
-	if ActiveTaskCanceler != nil {
-		ActiveTaskCanceler(taskID)
-	}
-
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Unscoped().Where("scan_task_id = ?", taskID).Delete(&sastModel.Vulnerability{}).Error; err != nil {
 			return err
@@ -244,46 +179,4 @@ func (s *ScanService) IsDuplicateTask(repoID uint, commitSHA string) bool {
 		Where("repo_id = ? AND commit_sha = ? AND status IN ?", repoID, commitSHA, []string{sastModel.TaskStatusPending, sastModel.TaskStatusRunning}).
 		Count(&count)
 	return count > 0
-}
-
-func (s *ScanService) SaveScanResults(repoID, taskID uint, results []scanner.ParsedVulnerability) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		repoURL := ""
-		var repo sastModel.Repository
-		if err := tx.Select("url").First(&repo, repoID).Error; err == nil {
-			repoURL = repo.URL
-		}
-
-		for _, p := range results {
-			vuln := &sastModel.Vulnerability{
-				ScanTaskID:  taskID,
-				RepoID:      repoID,
-				RepoURL:     repoURL,
-				Fingerprint: p.Fingerprint,
-			}
-
-			result := tx.Where("repo_id = ? AND fingerprint = ?", repoID, p.Fingerprint).
-				Assign(map[string]interface{}{
-					"repo_id":      repoID,
-					"repo_url":     repoURL,
-					"scan_task_id": taskID,
-					"file_path":    p.FilePath,
-					"start_line":   p.StartLine,
-					"end_line":     p.EndLine,
-					"message":      p.Message,
-					"severity":     p.Severity,
-					"rule_id":      p.RuleID,
-					"rule_name":    p.RuleName,
-					"code_snippet": p.CodeSnippet,
-					"fingerprint":  p.Fingerprint,
-					"status":       sastModel.VulnStatusNew,
-				}).
-				FirstOrCreate(vuln)
-
-			if result.Error != nil {
-				return fmt.Errorf("保存漏洞失败(rule=%s, file=%s, line=%d): %w", p.RuleID, p.FilePath, p.StartLine, result.Error)
-			}
-		}
-		return nil
-	})
 }

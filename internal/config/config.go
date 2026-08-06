@@ -66,6 +66,8 @@ type DastConfig struct {
 	RedisDialTimeout int    `mapstructure:"redis_dial_timeout"`
 	RedisReadTimeout int    `mapstructure:"redis_read_timeout"`
 	PocDir           string `mapstructure:"poc_dir"`
+	LogDir           string `mapstructure:"log_dir"`
+	ResultDir        string `mapstructure:"result_dir"`
 	DefaultPorts     string `mapstructure:"default_ports"`
 	QueuePrefix      string `mapstructure:"queue_prefix"`
 	PortScanRate     int    `mapstructure:"portscan_rate"`
@@ -101,8 +103,6 @@ type JWTConfig struct {
 	ExpireHours int    `mapstructure:"expire_hours"`
 }
 
-var GlobalConfig *Config
-
 func LoadConfig(path string) (*Config, error) {
 	viper.SetConfigFile(path)
 	viper.SetConfigType("yaml")
@@ -116,9 +116,14 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	// Apply default values if empty
 	if cfg.Dast.PocDir == "" {
 		cfg.Dast.PocDir = "./internal/dast/poc"
+	}
+	if cfg.Dast.LogDir == "" {
+		cfg.Dast.LogDir = "./result/dast/log"
+	}
+	if cfg.Dast.ResultDir == "" {
+		cfg.Dast.ResultDir = "./result/dast"
 	}
 	if cfg.Dast.DefaultPorts == "" {
 		cfg.Dast.DefaultPorts = "top1000"
@@ -139,8 +144,11 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Dast.PortScanType = "connect"
 	}
 
+	if cfg.Scanner.WorkDir == "" {
+		cfg.Scanner.WorkDir = "./result/sast"
+	}
 	if cfg.Sca.WorkDir == "" {
-		cfg.Sca.WorkDir = "./sca_result"
+		cfg.Sca.WorkDir = "./result/sca"
 	}
 	if cfg.Sca.OSVApiURL == "" {
 		cfg.Sca.OSVApiURL = "https://api.osv.dev/v1/querybatch"
@@ -152,11 +160,9 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Sca.MaxConcurrent = 2
 	}
 
-	GlobalConfig = &cfg
 	return &cfg, nil
 }
 
-// Convert DastConfig to the format needed by the DAST subsystems
 func (c *Config) DastRedisConfig() RedisConfig {
 	return c.Redis
 }

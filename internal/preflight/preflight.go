@@ -3,12 +3,13 @@ package preflight
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"devsecops/pkg/logger"
 )
 
 type CheckResult struct {
@@ -28,7 +29,7 @@ type DependTool struct {
 // RunChecks 执行系统全局依赖工具链检测。
 // 移除特定操作系统的包管理器依赖，统一采用 curl 方式直接从发行版地址拉取并安装可执行二进制文件。
 func RunChecks(autoInstall bool, failFast bool) []CheckResult {
-	log.Println("[preflight] 开始 DevSecOps 平台启动前依赖检测...")
+	logger.Preflight("Init", "开始 DevSecOps 平台启动前依赖检测...")
 	initNucleiEnv()
 	// 2. 定义平台核心依赖工具清单 (软提醒模式：不阻断平台启动)
 	tools := []DependTool{
@@ -47,15 +48,15 @@ func RunChecks(autoInstall bool, failFast bool) []CheckResult {
 		checks = append(checks, res)
 
 		if res.Found {
-			log.Printf("[preflight] ✔ %-12s %s", res.Name, res.Version)
+			logger.Preflight("Check", "✔ %-12s %s", res.Name, res.Version)
 		} else {
-			log.Printf("[preflight] ○ %-12s 未找到 (可选依赖工具)", res.Name)
+			logger.Preflight("Check", "○ %-12s 未找到 (可选依赖工具)", res.Name)
 			missingCount++
 		}
 	}
 
 	if missingCount > 0 {
-		log.Printf("[preflight] 提示: 检测到 %d 个依赖工具未找到，相关依赖功能被触发时可能受限。", missingCount)
+		logger.Preflight("Check", "提示: 检测到 %d 个依赖工具未找到，相关依赖功能被触发时可能受限。", missingCount)
 	}
 
 	return checks
@@ -72,16 +73,16 @@ func checkBinary(name string, required bool, versionArgs []string, autoInstall b
 	}
 
 	if autoInstall {
-		log.Printf("[preflight] %s 未找到，尝试通过 curl 自动下载安装...", name)
+		logger.Preflight("Install", "%s 未找到，尝试通过 curl 自动下载安装...", name)
 		if err := tryInstallViaCurl(name); err == nil {
 			if _, errLook := exec.LookPath(name); errLook == nil {
 				res.Found = true
 				res.Version = binaryVersion(name, versionArgs...)
-				log.Printf("[preflight] %s 通过 curl 自动安装成功", name)
+				logger.Preflight("Install", "%s 通过 curl 自动安装成功", name)
 				return res
 			}
 		} else {
-			log.Printf("[preflight] %s curl 自动安装失败: %v", name, err)
+			logger.Preflight("Install", "%s curl 自动安装失败: %v", name, err)
 		}
 	}
 
@@ -133,13 +134,13 @@ func tryInstallViaCurl(name string) error {
 func downloadZipAndInstall(url string, binName string) error {
 	tmpZip := fmt.Sprintf("/tmp/%s.zip", binName)
 
-	log.Printf("[preflight] 正在通过 curl 下载 %s: %s", binName, url)
+	logger.Preflight("Install", "正在通过 curl 下载 %s: %s", binName, url)
 	if err := runCmd("curl", "-fsSL", url, "-o", tmpZip); err != nil {
 		return fmt.Errorf("curl 下载 %s 失败: %w", binName, err)
 	}
 	defer os.Remove(tmpZip)
 
-	log.Printf("[preflight] 解压并安装 %s 到 /usr/local/bin/", binName)
+	logger.Preflight("Install", "解压并安装 %s 到 /usr/local/bin/", binName)
 	if err := runCmd("unzip", "-qo", tmpZip, binName, "-d", "/tmp/"); err != nil {
 		return fmt.Errorf("解压 %s 失败: %w", binName, err)
 	}
@@ -173,6 +174,6 @@ func runCmd(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	log.Printf("[preflight] 执行: %s %s", name, strings.Join(args, " "))
+	logger.Preflight("Cmd", "执行: %s %s", name, strings.Join(args, " "))
 	return cmd.Run()
 }

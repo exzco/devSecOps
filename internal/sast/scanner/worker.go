@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"devsecops/internal/config"
+	"devsecops/pkg/logger"
 	"devsecops/internal/sast/model"
 )
 
@@ -35,7 +35,7 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 	taskID := fmt.Sprintf("%d", task.ID)
 	defer func() {
 		if err := w.codeql.CleanupGeneratedInputs(taskID); err != nil {
-			log.Printf("[Task %d] 清理源码/数据库失败: %v", task.ID, err)
+			logger.SAST("Worker", "Task %d 清理源码/数据库失败: %v", task.ID, err)
 			progress("清理源码/数据库失败: " + err.Error())
 		} else {
 			progress("清理源码/数据库完成")
@@ -43,7 +43,7 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 	}()
 
 	// 1. git Clone 代码
-	log.Printf("[Task %d] 正在拉取代码...", task.ID)
+	logger.SAST("Worker", "Task %d 正在拉取代码...", task.ID)
 	progress("开始拉取仓库代码")
 	srcDir, err := w.git.CloneRepo(ctx, repo.URL, task.Branch, taskID, repo.AuthType, authSecret)
 	if err != nil {
@@ -53,7 +53,7 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 	progress("仓库代码拉取完成")
 
 	// 2. 创建数据库
-	log.Printf("[Task %d] 正在创建 CodeQL 数据库...", task.ID)
+	logger.SAST("Worker", "Task %d 正在创建 CodeQL 数据库...", task.ID)
 	progress("开始创建 CodeQL 数据库")
 	dbDir, err := w.codeql.CreateDatabase(ctx, taskID, srcDir, repo.Language, "")
 	if err != nil {
@@ -63,7 +63,7 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 	progress("CodeQL 数据库创建完成")
 
 	// 3. 执行分析
-	log.Printf("[Task %d] 正在运行 codeql 查询分析...", task.ID)
+	logger.SAST("Worker", "Task %d 正在运行 codeql 查询分析...", task.ID)
 	progress("开始执行 CodeQL 查询")
 	sarifFile, err := w.codeql.Analyze(ctx, taskID, dbDir, repo.Language, task.QuerySuite, task.RuleProfile, task.Rules)
 	if err != nil {
@@ -83,7 +83,6 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 
 	// 读取源码并补充代码片段
 	for i := range vulns {
-		// 1. 主漏洞代码片段
 		start := vulns[i].StartLine - 15
 		if start < 1 {
 			start = 1
@@ -91,20 +90,25 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 		end := vulns[i].EndLine + 15
 		vulns[i].CodeSnippet = readCodeFromFile(srcDir, vulns[i].FilePath, start, end)
 
-		// 2. 污点追踪链路步骤代码片段
-		for j := range vulns[i].DataFlow {
-			for k := range vulns[i].DataFlow[j] {
-				stepStart := vulns[i].DataFlow[j][k].StartLine - 15
-				if stepStart < 1 {
-					stepStart = 1
-				}
-				stepEnd := vulns[i].DataFlow[j][k].EndLine + 15
-				vulns[i].DataFlow[j][k].Snippet = readCodeFromFile(srcDir, vulns[i].DataFlow[j][k].FilePath, stepStart, stepEnd)
-			}
-		}
+		fillDataFlowSnippets(srcDir, vulns[i].DataFlow)
 	}
 
 	return vulns, sarifFile, err
+}
+
+// fillDataFlowSnippets reads source files and populates code snippets for each
+// taint-tracking data flow step.
+func fillDataFlowSnippets(srcDir string, dataFlow [][]FlowStep) {
+	for j := range dataFlow {
+		for k := range dataFlow[j] {
+			stepStart := dataFlow[j][k].StartLine - 15
+			if stepStart < 1 {
+				stepStart = 1
+			}
+			stepEnd := dataFlow[j][k].EndLine + 15
+			dataFlow[j][k].Snippet = readCodeFromFile(srcDir, dataFlow[j][k].FilePath, stepStart, stepEnd)
+		}
+	}
 }
 
 func readCodeFromFile(srcDir, filePath string, startLine, endLine int) string {

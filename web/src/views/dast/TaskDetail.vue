@@ -243,7 +243,7 @@ import {
   ReloadOutlined, 
   EyeOutlined 
 } from '@ant-design/icons-vue';
-import { getDastTaskStatus, getDastTaskResults, getDastTaskAssets } from '../../api';
+import { getDastTaskStatus, getDastTaskResults, getDastTaskAssets } from '../../api/dast';
 
 interface Finding {
   templateId: string;

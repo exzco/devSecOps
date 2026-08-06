@@ -191,11 +191,7 @@ func ParseSARIF(filePath string) ([]ParsedVulnerability, error) {
 				if vuln.EndLine == 0 {
 					vuln.EndLine = vuln.StartLine
 				}
-				if loc.ContextRegion != nil && loc.ContextRegion.Snippet != nil {
-					vuln.CodeSnippet = loc.ContextRegion.Snippet.Text
-				} else if loc.Region.Snippet != nil {
-					vuln.CodeSnippet = loc.Region.Snippet.Text
-				}
+				vuln.CodeSnippet = resolveCodeSnippet(loc)
 			}
 			vuln.FilePath = normalizePath(vuln.FilePath)
 
@@ -365,29 +361,46 @@ func mapLevelToSeverity(level string) string {
 	}
 }
 
+// resolveCodeSnippet extracts the best available code snippet from a SARIF physical location,
+// preferring ContextRegion over Region.
+func resolveCodeSnippet(loc SARIFPhysicalLocation) string {
+	if loc.ContextRegion != nil && loc.ContextRegion.Snippet != nil {
+		return loc.ContextRegion.Snippet.Text
+	}
+	if loc.Region.Snippet != nil {
+		return loc.Region.Snippet.Text
+	}
+	return ""
+}
+
+// buildFlowStep converts a single SARIF thread flow location into a FlowStep.
+func buildFlowStep(loc SARIFThreadFlowLocation, artifacts map[int]string) FlowStep {
+	step := FlowStep{
+		FilePath:  normalizePath(resolveArtifactURI(loc.Location.PhysicalLocation.ArtifactLocation, artifacts)),
+		StartLine: loc.Location.PhysicalLocation.Region.StartLine,
+		EndLine:   loc.Location.PhysicalLocation.Region.EndLine,
+	}
+	if step.EndLine == 0 {
+		step.EndLine = step.StartLine
+	}
+	if loc.Location.Message != nil {
+		step.Message = firstNonEmpty(loc.Location.Message.Text, loc.Location.Message.Markdown)
+	} else if loc.Message != nil {
+		step.Message = firstNonEmpty(loc.Message.Text, loc.Message.Markdown)
+	}
+	if loc.Location.PhysicalLocation.Region.Snippet != nil {
+		step.Snippet = loc.Location.PhysicalLocation.Region.Snippet.Text
+	}
+	return step
+}
+
 func extractDataFlow(codeFlows []SARIFCodeFlow, artifacts map[int]string) [][]FlowStep {
 	var paths [][]FlowStep
 	for _, cf := range codeFlows {
 		for _, tf := range cf.ThreadFlows {
 			var steps []FlowStep
 			for _, loc := range tf.Locations {
-				step := FlowStep{
-					FilePath:  normalizePath(resolveArtifactURI(loc.Location.PhysicalLocation.ArtifactLocation, artifacts)),
-					StartLine: loc.Location.PhysicalLocation.Region.StartLine,
-					EndLine:   loc.Location.PhysicalLocation.Region.EndLine,
-				}
-				if step.EndLine == 0 {
-					step.EndLine = step.StartLine
-				}
-				if loc.Location.Message != nil {
-					step.Message = firstNonEmpty(loc.Location.Message.Text, loc.Location.Message.Markdown)
-				} else if loc.Message != nil {
-					step.Message = firstNonEmpty(loc.Message.Text, loc.Message.Markdown)
-				}
-				if loc.Location.PhysicalLocation.Region.Snippet != nil {
-					step.Snippet = loc.Location.PhysicalLocation.Region.Snippet.Text
-				}
-				steps = append(steps, step)
+				steps = append(steps, buildFlowStep(loc, artifacts))
 			}
 			if len(steps) > 0 {
 				paths = append(paths, steps)
