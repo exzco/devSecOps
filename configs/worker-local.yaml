@@ -1,0 +1,33 @@
+server:
+  port: 22211
+  mode: debug
+
+database:
+  host: 10.1.24.169
+  port: 5432
+  user: codeql
+  password: codeql123
+  dbname: codeql_platform
+  sslmode: disable
+
+redis:
+  addr: 10.1.24.169:6379
+  password:
+  db: 10
+
+scanner:
+  codeql_path: "/home/wsh/.local/codeql/codeql"
+  codeql_queries: "/home/wsh/.local/codeql/qlpacks"
+  work_dir: "./data/sast"
+  max_concurrent: 4
+  timeout_minutes: 120
+  default_profile: baseline
+
+dast:
+  poc_dir: "./data/pocs"
+  default_ports: "top1000"
+  queue_prefix: "scan"
+
+worker:
+  callback_url: "http://10.1.24.169:22211"
+  token: "change-me-in-production"

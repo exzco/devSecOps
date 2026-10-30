@@ -56,7 +56,7 @@
       <a-card class="rounded-lg border border-zinc-200 bg-white" :bordered="false">
         <div class="flex items-center justify-between">
           <div>
-            <div class="text-xs font-semibold text-zinc-500">分布式算力 Worker 节点</div>
+            <div class="text-xs font-semibold text-zinc-500">Worker 节点</div>
             <div class="text-2xl font-bold text-zinc-900 mt-1.5 font-mono flex items-center gap-2">
               <span>{{ workersOverview?.online_workers || 0 }}</span>
               <span class="text-xs font-normal text-zinc-400">/ {{ workersOverview?.total_workers || 0 }} 在线</span>
@@ -95,13 +95,13 @@
             <div class="p-1.5 bg-zinc-900 text-white rounded-md">
               <Cpu :size="16" />
             </div>
-            <h3 class="text-base font-semibold text-zinc-900 tracking-tight">分布式算力节点与环境就绪大盘</h3>
+            <h3 class="text-base font-semibold text-zinc-900 tracking-tight">worker 节点列表</h3>
             <span
               v-if="workersOverview?.all_ready && (workersOverview?.online_workers || 0) > 0"
               class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
             >
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              集群环境完备就绪
+              环境正常
             </span>
             <span
               v-else-if="workersOverview?.has_missing_deps"
@@ -118,7 +118,7 @@
             </span>
           </div>
           <p class="text-xs text-zinc-500 mt-1">
-            实时感知分布式算力节点心跳、系统指标与外部扫描工具链（Git / CodeQL CLI / Java JDK / PoC 规则库）就绪状态。
+            
           </p>
         </div>
 
@@ -144,7 +144,7 @@
           <AlertTriangle :size="18" class="text-rose-600 shrink-0 mt-0.5" />
           <div class="flex-1">
             <div class="text-xs font-bold text-rose-900">
-              检测到 {{ workersOverview.missing_dependencies.length }} 项工作环境依赖缺失或异常，将导致相关任务执行失败：
+              检测到 {{ workersOverview.missing_dependencies.length }} 项工作环境依赖缺失或异常，可能导致相关任务执行失败：
             </div>
             <ul class="mt-2 space-y-1 text-xs text-rose-800 list-disc list-inside">
               <li v-for="(dep, idx) in workersOverview.missing_dependencies" :key="idx" class="font-mono text-[11px]">
@@ -185,7 +185,7 @@
                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
               >
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                在线就绪
+                在线
               </span>
               <span
                 v-else-if="w.status === 'busy'"
@@ -270,15 +270,15 @@
       <!-- Empty State Guide -->
       <div v-else class="mt-6 py-10 px-6 rounded-lg border border-dashed border-zinc-300 text-center bg-zinc-50/50">
         <Server :size="36" class="mx-auto text-zinc-400 mb-3" />
-        <h4 class="text-sm font-semibold text-zinc-800">当前暂无分布式 Worker 节点连接</h4>
+        <h4 class="text-sm font-semibold text-zinc-800">当前暂无 Worker 节点连接</h4>
         <p class="text-xs text-zinc-500 max-w-md mx-auto mt-1 leading-relaxed">
-          云端控制面服务（cvps1: 10.1.24.169）仅运行 Server 控制台，不承担扫描负载。<br />
+          控制面服务运行 Server 控制台，不承担扫描负载。<br />
           请在本地计算主机分别启动对应的执行 Worker：
         </p>
         <div class="mt-4 max-w-lg mx-auto bg-zinc-900 text-zinc-200 rounded-md p-3 text-left font-mono text-xs space-y-1">
-          <div class="text-zinc-500 text-[11px]"># 启动 SAST 静态代码分析 Worker:</div>
+          <div class="text-zinc-500 text-[11px]"># 启动 SAST  Worker:</div>
           <div class="text-emerald-400">./worker-sast --config configs/example.yaml</div>
-          <div class="text-zinc-500 text-[11px] pt-1"># 启动 DAST 动态脆弱性探测 Worker:</div>
+          <div class="text-zinc-500 text-[11px] pt-1"># 启动 DAST  Worker:</div>
           <div class="text-purple-400">./worker-dast --config configs/example.yaml</div>
         </div>
       </div>

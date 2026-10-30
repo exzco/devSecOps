@@ -76,7 +76,6 @@ func SetupRouter(h *Handlers) *gin.Engine {
 			v1.GET("/sca/tasks/:id/vulnerabilities", h.ScaHandler.GetVulnerabilities)
 		}
 
-		// 分布式算力节点与环境就绪大盘
 		if h.WorkerHandler != nil {
 			v1.GET("/workers", h.WorkerHandler.GetOverview)
 		}
