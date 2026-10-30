@@ -4,9 +4,11 @@
       <template #extra>
         <a-space :size="8">
           <a-button type="primary" class="premium-gradient border-none hover:opacity-90" @click="handleOpenAdd">
+            <template #icon><Plus :size="14" class="inline-block" /></template>
             新增任务
           </a-button>
           <a-button type="default" @click="loadConfigs">
+            <template #icon><RotateCw :size="14" class="inline-block" /></template>
             刷新
           </a-button>
         </a-space>
@@ -52,6 +54,7 @@
                   :loading="runningIds.has(record.config_id)"
                   @click="handleRerun(record)"
                 >
+                  <template #icon><Play :size="14" class="inline-block" /></template>
                   开始
                 </a-button>
                 <a-button
@@ -60,6 +63,7 @@
                   class="!p-0 !text-amber-500 hover:!text-amber-400"
                   @click="handleOpenEdit(record)"
                 >
+                  <template #icon><Pencil :size="14" class="inline-block" /></template>
                   编辑
                 </a-button>
                 <a-popconfirm
@@ -69,6 +73,7 @@
                   @confirm="handleDeleteConfig(record.config_id)"
                 >
                   <a-button type="link" danger size="small" class="!p-0">
+                    <template #icon><Trash2 :size="14" class="inline-block" /></template>
                     删除
                   </a-button>
                 </a-popconfirm>
@@ -112,6 +117,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
+import { Plus, RotateCw, Play, Pencil, Trash2 } from 'lucide-vue-next';
 import { getDastConfigs, createDastConfig, deleteDastConfig, updateDastConfig, createDastTask } from '../../api';
 
 // 扫描任务配置模板（持久化，与扫描执行记录完全独立）
@@ -209,9 +215,7 @@ const handleConfirm = async () => {
         ports: ports || undefined,
       });
       // 2. 同时触发一次扫描任务（在「任务列表」中可见）
-      const runId = `${name}-${Date.now()}`;
       await createDastTask({
-        task_id: runId,
         task_name: name,
         ips,
         ports: ports || undefined,
@@ -235,9 +239,7 @@ const handleRerun = async (record: DastConfig) => {
   }
   runningIds.value = new Set(runningIds.value).add(record.config_id);
   try {
-    const runId = `${record.task_name}-${Date.now()}`;
     await createDastTask({
-      task_id: runId,
       task_name: record.task_name,
       ips: record.ips,
       ports: record.ports || '',

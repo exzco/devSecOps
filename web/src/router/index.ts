@@ -40,14 +40,14 @@ const router = createRouter({
           component: () => import('../views/dast/DastHistory.vue'),
         },
         {
-          path: '/dast/pocs',
-          name: 'DastPocs',
-          component: () => import('../views/dast/PocList.vue'),
-        },
-        {
           path: '/dast/tasks/:id',
           name: 'DastTaskDetail',
           component: () => import('../views/dast/TaskDetail.vue'),
+        },
+        {
+          path: '/sca/tasks',
+          name: 'ScaTasks',
+          component: () => import('../views/sca/ScaTasks.vue'),
         },
       ],
     },

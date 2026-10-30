@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"devsecops/internal/config"
-	"devsecops/internal/sast/model"
+	"devsecops/internal/sast/contract"
 )
 
 type ScanWorker struct {
@@ -27,15 +27,15 @@ func NewScanWorker(cfg *config.ScannerConfig) *ScanWorker {
 	}
 }
 
-func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *model.Repository, authSecret string, progress ScanProgressLogger) ([]ParsedVulnerability, string, error) {
+func (w *ScanWorker) RunScan(ctx context.Context, job *contract.Job, progress ScanProgressLogger) ([]ParsedVulnerability, string, error) {
 	if progress == nil {
 		progress = func(string) {}
 	}
 
-	taskID := fmt.Sprintf("%d", task.ID)
+	taskID := fmt.Sprintf("%d", job.TaskID)
 	defer func() {
 		if err := w.codeql.CleanupGeneratedInputs(taskID); err != nil {
-			log.Printf("[Task %d] 清理源码/数据库失败: %v", task.ID, err)
+			log.Printf("[Task %d] 清理源码/数据库失败: %v", job.TaskID, err)
 			progress("清理源码/数据库失败: " + err.Error())
 		} else {
 			progress("清理源码/数据库完成")
@@ -43,19 +43,23 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 	}()
 
 	// 1. git Clone 代码
-	log.Printf("[Task %d] 正在拉取代码...", task.ID)
+	log.Printf("[Task %d] 正在拉取代码...", job.TaskID)
 	progress("开始拉取仓库代码")
-	srcDir, err := w.git.CloneRepo(ctx, repo.URL, task.Branch, taskID, repo.AuthType, authSecret)
+	srcDir, err := w.git.CloneRepo(ctx, job.RepoURL, job.Branch, taskID, job.AuthType, job.AuthSecret)
 	if err != nil {
 		progress("拉取仓库代码失败: " + err.Error())
 		return nil, "", err
 	}
 	progress("仓库代码拉取完成")
+	if commitSHA, err := w.git.GetLatestCommit(ctx, srcDir); err == nil {
+		job.CommitSHA = commitSHA
+		progress("代码版本: " + commitSHA)
+	}
 
 	// 2. 创建数据库
-	log.Printf("[Task %d] 正在创建 CodeQL 数据库...", task.ID)
+	log.Printf("[Task %d] 正在创建 CodeQL 数据库...", job.TaskID)
 	progress("开始创建 CodeQL 数据库")
-	dbDir, err := w.codeql.CreateDatabase(ctx, taskID, srcDir, repo.Language, "")
+	dbDir, err := w.codeql.CreateDatabase(ctx, taskID, srcDir, job.Language, "")
 	if err != nil {
 		progress("创建 CodeQL 数据库失败: " + err.Error())
 		return nil, "", err
@@ -63,9 +67,9 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 	progress("CodeQL 数据库创建完成")
 
 	// 3. 执行分析
-	log.Printf("[Task %d] 正在运行 codeql 查询分析...", task.ID)
+	log.Printf("[Task %d] 正在运行 codeql 查询分析...", job.TaskID)
 	progress("开始执行 CodeQL 查询")
-	sarifFile, err := w.codeql.Analyze(ctx, taskID, dbDir, repo.Language, task.QuerySuite, task.RuleProfile, task.Rules)
+	sarifFile, err := w.codeql.Analyze(ctx, taskID, dbDir, job.Language, job.QuerySuite, job.RuleProfile, job.Rules)
 	if err != nil {
 		progress("CodeQL 查询执行失败: " + err.Error())
 		return nil, "", err
@@ -104,7 +108,7 @@ func (w *ScanWorker) RunScan(ctx context.Context, task *model.ScanTask, repo *mo
 		}
 	}
 
-	return vulns, sarifFile, err
+	return vulns, sarifFile, nil
 }
 
 func readCodeFromFile(srcDir, filePath string, startLine, endLine int) string {
@@ -154,8 +158,4 @@ func readCodeFromFile(srcDir, filePath string, startLine, endLine int) string {
 		snippetLines = append(snippetLines, lines[i])
 	}
 	return strings.Join(snippetLines, "\n")
-}
-
-func (w *ScanWorker) Cleanup(taskID string) error {
-	return w.codeql.CleanupGeneratedInputs(taskID)
 }

@@ -10,7 +10,7 @@
             <div class="text-2xl font-bold text-zinc-900 mt-1.5 font-mono">{{ repoCount }}</div>
           </div>
           <div class="p-2.5 bg-zinc-50 border border-zinc-200 rounded-md text-zinc-700">
-            <GithubOutlined class="text-lg" />
+            <FolderGit2 :size="20" />
           </div>
         </div>
         <div class="mt-3 text-[11px] text-zinc-400 font-medium">
@@ -26,7 +26,7 @@
             <div class="text-2xl font-bold text-zinc-900 mt-1.5 font-mono">{{ sastTaskCount }}</div>
           </div>
           <div class="p-2.5 bg-zinc-50 border border-zinc-200 rounded-md text-zinc-700">
-            <CodeOutlined class="text-lg" />
+            <Code2 :size="20" />
           </div>
         </div>
         <div class="mt-3 text-[11px] text-zinc-500 flex items-center gap-1">
@@ -43,7 +43,7 @@
             <div class="text-2xl font-bold text-zinc-900 mt-1.5 font-mono">{{ dastTaskCount }}</div>
           </div>
           <div class="p-2.5 bg-zinc-50 border border-zinc-200 rounded-md text-zinc-700">
-            <RadarChartOutlined class="text-lg" />
+            <Radar :size="20" />
           </div>
         </div>
         <div class="mt-3 text-[11px] text-zinc-500 flex items-center gap-1">
@@ -60,7 +60,7 @@
             <div class="text-2xl font-bold text-zinc-900 mt-1.5 font-mono">{{ totalFindings }}</div>
           </div>
           <div class="p-2.5 bg-zinc-50 border border-zinc-200 rounded-md text-zinc-700">
-            <BugOutlined class="text-lg" />
+            <Bug :size="20" />
           </div>
         </div>
         <div class="mt-3 text-[11px] text-zinc-500 flex items-center gap-1">
@@ -75,13 +75,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { message } from 'ant-design-vue';
-import {
-  SyncOutlined,
-  GithubOutlined,
-  CodeOutlined,
-  RadarChartOutlined,
-  BugOutlined
-} from '@ant-design/icons-vue';
+import { FolderGit2, Code2, Radar, Bug } from 'lucide-vue-next';
 import { getRepoList, getScanTasks, getDastTasks } from '../api';
 
 const repoCount = ref(0);
@@ -90,16 +84,6 @@ const sastVulnCount = ref(0);
 const dastTaskCount = ref(0);
 const dastOpenPorts = ref(0);
 const dastFindingsCount = ref(0);
-
-const recentDastTasks = ref<any[]>([]);
-
-const dastColumns = [
-  { title: '任务 ID', dataIndex: 'task_id', key: 'task_id', width: 220, ellipsis: true },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 120 },
-  { title: '目标进度', key: 'progress', width: 140 },
-  { title: '开放端口数', dataIndex: 'open_ports', key: 'open_ports', width: 120 },
-  { title: '安全漏洞数', dataIndex: 'findings', key: 'findings', width: 120 },
-];
 
 const totalFindings = computed(() => {
   return sastVulnCount.value + dastFindingsCount.value;
@@ -120,7 +104,6 @@ const refreshAll = async () => {
     dastTaskCount.value = dastTasks.length;
     dastOpenPorts.value = dastTasks.reduce((sum: number, task: any) => sum + (task.open_ports || 0), 0);
     dastFindingsCount.value = dastTasks.reduce((sum: number, task: any) => sum + (task.findings || 0), 0);
-    recentDastTasks.value = dastTasks.slice(0, 5);
 
     message.success('数据已同步完成');
   } catch (err) {

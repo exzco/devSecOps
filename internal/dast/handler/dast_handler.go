@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -17,39 +16,8 @@ func NewDastHandler(svc *service.DastService) *DastHandler {
 	return &DastHandler{svc: svc}
 }
 
-type CreateDastTaskRequest struct {
-	TaskID   string `json:"task_id"`
-	TaskName string `json:"task_name"`
-	IPs      string `json:"ips" binding:"required"`
-	Ports    string `json:"ports"`
-}
-
-func (h *DastHandler) CreateTask(c *gin.Context) {
-	var req CreateDastTaskRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	ctx := context.Background()
-	taskID, totalIPs, err := h.svc.CreateTask(ctx, req.TaskID, req.TaskName, req.IPs, req.Ports)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "DAST scan task submitted",
-		"data": gin.H{
-			"task_id":   taskID,
-			"total_ips": totalIPs,
-			"ports":     req.Ports,
-		},
-	})
-}
-
 func (h *DastHandler) ListTasks(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	tasks, err := h.svc.ListTasks(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -64,7 +32,7 @@ func (h *DastHandler) ListTasks(c *gin.Context) {
 
 func (h *DastHandler) GetTaskStatus(c *gin.Context) {
 	taskId := c.Param("id")
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	statusMap, err := h.svc.GetTaskStatus(ctx, taskId)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -79,7 +47,7 @@ func (h *DastHandler) GetTaskStatus(c *gin.Context) {
 
 func (h *DastHandler) GetTaskResults(c *gin.Context) {
 	taskId := c.Param("id")
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	findings, err := h.svc.GetTaskResults(ctx, taskId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -94,8 +62,11 @@ func (h *DastHandler) GetTaskResults(c *gin.Context) {
 
 func (h *DastHandler) DeleteTask(c *gin.Context) {
 	taskId := c.Param("id")
-	ctx := context.Background()
-	_ = h.svc.DeleteTask(ctx, taskId)
+	ctx := c.Request.Context()
+	if err := h.svc.DeleteTask(ctx, taskId); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "DAST task deleted",
@@ -103,23 +74,9 @@ func (h *DastHandler) DeleteTask(c *gin.Context) {
 	})
 }
 
-func (h *DastHandler) StopTask(c *gin.Context) {
-	taskId := c.Param("id")
-	ctx := context.Background()
-	if err := h.svc.StopTask(ctx, taskId); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "DAST task stopped",
-		"data":    gin.H{"task_id": taskId},
-	})
-}
-
 func (h *DastHandler) GetTaskAssets(c *gin.Context) {
 	taskId := c.Param("id")
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	assets, err := h.svc.GetTaskAssets(ctx, taskId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -132,8 +89,6 @@ func (h *DastHandler) GetTaskAssets(c *gin.Context) {
 	})
 }
 
-// ==================== 扫描配置模板接口 ====================
-
 type CreateConfigRequest struct {
 	ConfigID string `json:"config_id"`
 	TaskName string `json:"task_name" binding:"required"`
@@ -142,13 +97,17 @@ type CreateConfigRequest struct {
 }
 
 func (h *DastHandler) ListConfigs(c *gin.Context) {
-	ctx := context.Background()
+	ctx := c.Request.Context()
 	configs, err := h.svc.ListConfigs(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "configs fetched", "data": configs})
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "DAST configs fetched",
+		"data":    configs,
+	})
 }
 
 func (h *DastHandler) CreateConfig(c *gin.Context) {
@@ -157,41 +116,51 @@ func (h *DastHandler) CreateConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ctx := context.Background()
-	if err := h.svc.CreateConfig(ctx, req.ConfigID, req.TaskName, req.IPs, req.Ports); err != nil {
+
+	ctx := c.Request.Context()
+	cfg, err := h.svc.CreateConfig(ctx, req.TaskName, req.IPs, req.Ports)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "config created"})
-}
 
-func (h *DastHandler) DeleteConfig(c *gin.Context) {
-	configID := c.Param("id")
-	ctx := context.Background()
-	if err := h.svc.DeleteConfig(ctx, configID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "config deleted", "data": gin.H{"config_id": configID}})
-}
-
-type UpdateConfigRequest struct {
-	TaskName string `json:"task_name" binding:"required"`
-	IPs      string `json:"ips" binding:"required"`
-	Ports    string `json:"ports"`
+	c.JSON(http.StatusOK, gin.H{
+		"message": "DAST config created",
+		"data":    gin.H{"config_id": cfg.ConfigID},
+	})
 }
 
 func (h *DastHandler) UpdateConfig(c *gin.Context) {
 	configID := c.Param("id")
-	var req UpdateConfigRequest
+	var req CreateConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ctx := context.Background()
-	if err := h.svc.UpdateConfig(ctx, configID, req.TaskName, req.IPs, req.Ports); err != nil {
+
+	ctx := c.Request.Context()
+	cfg, err := h.svc.UpdateConfig(ctx, configID, req.TaskName, req.IPs, req.Ports)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "config updated"})
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "DAST config updated",
+		"data":    gin.H{"config_id": cfg.ConfigID},
+	})
+}
+
+func (h *DastHandler) DeleteConfig(c *gin.Context) {
+	configID := c.Param("id")
+	ctx := c.Request.Context()
+	if err := h.svc.DeleteConfig(ctx, configID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "DAST config deleted",
+		"data":    gin.H{"config_id": configID},
+	})
 }

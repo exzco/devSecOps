@@ -9,7 +9,7 @@
       <!-- Logo Brand -->
       <div class="flex h-16 items-center gap-2.5 px-6 border-b border-zinc-200 bg-[#ffffff] overflow-hidden">
         <div class="flex items-center justify-center w-7 h-7 rounded-md bg-zinc-950 text-white shadow-sm">
-          <SafetyCertificateOutlined class="text-base font-bold" />
+          <ShieldCheck :size="16" class="text-white" />
         </div>
         <span class="text-zinc-900 font-bold text-base tracking-tight">
           DevSecOps
@@ -26,17 +26,17 @@
         :style="{ background: 'transparent' }"
       >
         <a-menu-item key="Dashboard" @click="navigate('Dashboard')">
-          <template #icon><DashboardOutlined /></template>
+          <template #icon><LayoutDashboard :size="16" /></template>
           <span>概览</span>
         </a-menu-item>
 
         <a-sub-menu key="sast" title="SAST 静态扫描">
-          <template #icon><CodeOutlined /></template>
+          <template #icon><Code2 :size="16" /></template>
           <a-menu-item key="SastRepos" @click="navigate('SastRepos')">
             代码仓库
           </a-menu-item>
           <a-menu-item key="SastScanConfig" @click="navigate('SastScanConfig')">
-            Codeql 配置
+            扫描任务配置
           </a-menu-item>
           <a-menu-item key="SastTasks" @click="navigate('SastTasks')">
             任务列表
@@ -44,15 +44,19 @@
         </a-sub-menu>
 
         <a-sub-menu key="dast" title="DAST 动态扫描">
-          <template #icon><RadarChartOutlined /></template>
+          <template #icon><Radar :size="16" /></template>
           <a-menu-item key="DastTasks" @click="navigate('DastTasks')">
             扫描任务配置
           </a-menu-item>
           <a-menu-item key="DastHistory" @click="navigate('DastHistory')">
             任务列表
           </a-menu-item>
-          <a-menu-item key="DastPocs" @click="navigate('DastPocs')">
-            PoC 模板管理
+        </a-sub-menu>
+
+        <a-sub-menu key="sca" title="SCA 依赖分析">
+          <template #icon><Boxes :size="16" /></template>
+          <a-menu-item key="ScaTasks" @click="navigate('ScaTasks')">
+            任务与漏洞清单
           </a-menu-item>
         </a-sub-menu>
       </a-menu>
@@ -74,7 +78,7 @@
 
         <div class="flex items-center gap-6">
           <a-badge dot class="cursor-pointer">
-            <BellOutlined class="text-lg text-zinc-500 hover:text-zinc-900 transition-colors" />
+            <Bell :size="18" class="text-zinc-500 hover:text-zinc-900 transition-colors" />
           </a-badge>
           <div class="h-4 w-px bg-zinc-200"></div>
           <div class="flex items-center gap-3 cursor-pointer group">
@@ -100,19 +104,19 @@
 import { ref, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  SafetyCertificateOutlined,
-  DashboardOutlined,
-  CodeOutlined,
-  RadarChartOutlined,
-  BellOutlined
-} from '@ant-design/icons-vue'
+  ShieldCheck,
+  LayoutDashboard,
+  Code2,
+  Radar,
+  Boxes,
+  Bell
+} from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
 
-const collapsed = ref(false)
 const selectedKeys = ref<string[]>(['Dashboard'])
-const openKeys = ref<string[]>(['sast', 'dast'])
+const openKeys = ref<string[]>(['sast', 'dast', 'sca'])
 
 // Keep selectedKeys in sync with active route name
 watch(
@@ -129,13 +133,13 @@ const currentRouteName = computed(() => {
   const map: Record<string, string> = {
     Dashboard: '概览',
     SastRepos: '代码仓库',
-    SastScanConfig: 'Codeql 配置',
+    SastScanConfig: 'SAST 扫描任务配置',
     SastTasks: '任务列表',
     SastTaskDetail: '扫描详情与日志',
     DastTasks: '扫描任务配置',
     DastHistory: '任务列表',
-    DastPocs: 'PoC 模板管理',
-    DastTaskDetail: '动态扫描详情'
+    DastTaskDetail: '动态扫描详情',
+    ScaTasks: 'SCA 依赖与漏洞分析',
   }
   return map[route.name as string] || route.name || '页面'
 })

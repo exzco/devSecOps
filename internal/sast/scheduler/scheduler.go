@@ -1,16 +1,17 @@
 package scheduler
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/hibiken/asynq"
-	"gorm.io/gorm"
 
 	"devsecops/internal/config"
+	"devsecops/internal/sast/queue"
 	"devsecops/internal/sast/scanner"
 )
 
-func StartWorker(cfg *config.Config, db *gorm.DB) *asynq.Server {
+func StartWorker(cfg *config.Config) (*asynq.Server, error) {
 	srv := asynq.NewServer(
 		asynq.RedisClientOpt{
 			Addr:     cfg.Redis.Addr,
@@ -26,22 +27,17 @@ func StartWorker(cfg *config.Config, db *gorm.DB) *asynq.Server {
 		},
 	)
 
-	dispatcher := NewTaskDispatcher(db, scanner.NewScanWorker(&cfg.Scanner))
+	dispatcher := NewTaskDispatcher(
+		scanner.NewScanWorker(&cfg.Scanner),
+		NewWorkerClient(&cfg.Worker),
+	)
 
 	mux := asynq.NewServeMux()
-	mux.Handle(TypeScanRepo, dispatcher)
+	mux.Handle(queue.TypeScanRepo, dispatcher)
 
 	log.Println("[Asynq Worker] 启动，等待 SAST 任务...")
 	if err := srv.Start(mux); err != nil {
-		log.Fatalf("[Asynq Worker] 启动失败: %v", err)
+		return nil, fmt.Errorf("start asynq worker: %w", err)
 	}
-	return srv
-}
-
-func NewClient(cfg *config.RedisConfig) *asynq.Client {
-	return asynq.NewClient(asynq.RedisClientOpt{
-		Addr:     cfg.Addr,
-		Password: cfg.Password,
-		DB:       cfg.DB,
-	})
+	return srv, nil
 }

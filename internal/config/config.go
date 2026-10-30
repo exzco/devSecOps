@@ -2,10 +2,23 @@ package config
 
 import (
 	"fmt"
-	"time"
+	"os"
 
 	"github.com/spf13/viper"
 )
+
+func ResolvePath(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if fromEnv := os.Getenv("CONFIG_FILE"); fromEnv != "" {
+		return fromEnv
+	}
+	if _, err := os.Stat("configs/config.local.yaml"); err == nil {
+		return "configs/config.local.yaml"
+	}
+	return "configs/example.yaml"
+}
 
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
@@ -13,10 +26,7 @@ type Config struct {
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Scanner  ScannerConfig  `mapstructure:"scanner"`
 	Dast     DastConfig     `mapstructure:"dast"`
-	Sca      ScaConfig      `mapstructure:"sca"`
-	MinIO    MinIOConfig    `mapstructure:"minio"`
-	OpenAI   OpenAIConfig   `mapstructure:"openai"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
+	Worker   WorkerConfig   `mapstructure:"worker"`
 }
 
 type ServerConfig struct {
@@ -45,15 +55,13 @@ type RedisConfig struct {
 }
 
 type ScannerConfig struct {
-	CodeQLPath         string                        `mapstructure:"codeql_path"`
-	CodeQLQueries      string                        `mapstructure:"codeql_queries"`
-	WorkDir            string                        `mapstructure:"work_dir"`
-	MaxConcurrent      int                           `mapstructure:"max_concurrent"`
-	TimeoutMinutes     int                           `mapstructure:"timeout_minutes"`
-	Cron               string                        `mapstructure:"cron"`
-	SupportedLanguages []string                      `mapstructure:"supported_languages"`
-	DefaultProfile     string                        `mapstructure:"default_profile"`
-	RuleProfiles       map[string]ScannerRuleProfile `mapstructure:"rule_profiles"`
+	CodeQLPath     string                        `mapstructure:"codeql_path"`
+	CodeQLQueries  string                        `mapstructure:"codeql_queries"`
+	WorkDir        string                        `mapstructure:"work_dir"`
+	MaxConcurrent  int                           `mapstructure:"max_concurrent"`
+	TimeoutMinutes int                           `mapstructure:"timeout_minutes"`
+	DefaultProfile string                        `mapstructure:"default_profile"`
+	RuleProfiles   map[string]ScannerRuleProfile `mapstructure:"rule_profiles"`
 }
 
 type ScannerRuleProfile struct {
@@ -63,45 +71,15 @@ type ScannerRuleProfile struct {
 }
 
 type DastConfig struct {
-	RedisDialTimeout int    `mapstructure:"redis_dial_timeout"`
-	RedisReadTimeout int    `mapstructure:"redis_read_timeout"`
-	PocDir           string `mapstructure:"poc_dir"`
-	DefaultPorts     string `mapstructure:"default_ports"`
-	QueuePrefix      string `mapstructure:"queue_prefix"`
-	PortScanRate     int    `mapstructure:"portscan_rate"`
-	PortScanTimeout  int    `mapstructure:"portscan_timeout"`
-	PortScanThreads  int    `mapstructure:"portscan_threads"`
-	PortScanType     string `mapstructure:"portscan_type"`
-	ConsoleLog       bool   `mapstructure:"console_log"`
+	PocDir       string `mapstructure:"poc_dir"`
+	DefaultPorts string `mapstructure:"default_ports"`
+	QueuePrefix  string `mapstructure:"queue_prefix"`
 }
 
-type ScaConfig struct {
-	WorkDir        string `mapstructure:"work_dir"`
-	OSVApiURL      string `mapstructure:"osv_api_url"`
-	TimeoutMinutes int    `mapstructure:"timeout_minutes"`
-	MaxConcurrent  int    `mapstructure:"max_concurrent"`
+type WorkerConfig struct {
+	CallbackURL string `mapstructure:"callback_url"`
+	Token       string `mapstructure:"token"`
 }
-
-type MinIOConfig struct {
-	Endpoint  string `mapstructure:"endpoint"`
-	AccessKey string `mapstructure:"access_key"`
-	SecretKey string `mapstructure:"secret_key"`
-	Bucket    string `mapstructure:"bucket"`
-	UseSSL    bool   `mapstructure:"use_ssl"`
-}
-
-type OpenAIConfig struct {
-	APIKey  string `mapstructure:"api_key"`
-	BaseURL string `mapstructure:"base_url"`
-	Model   string `mapstructure:"model"`
-}
-
-type JWTConfig struct {
-	Secret      string `mapstructure:"secret"`
-	ExpireHours int    `mapstructure:"expire_hours"`
-}
-
-var GlobalConfig *Config
 
 func LoadConfig(path string) (*Config, error) {
 	viper.SetConfigFile(path)
@@ -117,8 +95,17 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// Apply default values if empty
+	if cfg.Scanner.WorkDir == "" {
+		cfg.Scanner.WorkDir = "./data/sast"
+	}
+	if cfg.Scanner.MaxConcurrent <= 0 {
+		cfg.Scanner.MaxConcurrent = 2
+	}
+	if cfg.Scanner.TimeoutMinutes <= 0 {
+		cfg.Scanner.TimeoutMinutes = 30
+	}
 	if cfg.Dast.PocDir == "" {
-		cfg.Dast.PocDir = "./internal/dast/poc"
+		cfg.Dast.PocDir = "./pocs"
 	}
 	if cfg.Dast.DefaultPorts == "" {
 		cfg.Dast.DefaultPorts = "top1000"
@@ -126,49 +113,8 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Dast.QueuePrefix == "" {
 		cfg.Dast.QueuePrefix = "scan"
 	}
-	if cfg.Dast.PortScanRate == 0 {
-		cfg.Dast.PortScanRate = 1000
+	if cfg.Worker.CallbackURL == "" {
+		cfg.Worker.CallbackURL = "http://localhost:22211"
 	}
-	if cfg.Dast.PortScanTimeout == 0 {
-		cfg.Dast.PortScanTimeout = 5
-	}
-	if cfg.Dast.PortScanThreads == 0 {
-		cfg.Dast.PortScanThreads = 25
-	}
-	if cfg.Dast.PortScanType == "" {
-		cfg.Dast.PortScanType = "connect"
-	}
-
-	if cfg.Sca.WorkDir == "" {
-		cfg.Sca.WorkDir = "./sca_result"
-	}
-	if cfg.Sca.OSVApiURL == "" {
-		cfg.Sca.OSVApiURL = "https://api.osv.dev/v1/querybatch"
-	}
-	if cfg.Sca.TimeoutMinutes == 0 {
-		cfg.Sca.TimeoutMinutes = 15
-	}
-	if cfg.Sca.MaxConcurrent == 0 {
-		cfg.Sca.MaxConcurrent = 2
-	}
-
-	GlobalConfig = &cfg
 	return &cfg, nil
-}
-
-// Convert DastConfig to the format needed by the DAST subsystems
-func (c *Config) DastRedisConfig() RedisConfig {
-	return c.Redis
-}
-
-func (c *Config) DastDialTimeout() time.Duration {
-	return time.Duration(c.Dast.RedisDialTimeout) * time.Second
-}
-
-func (c *Config) DastReadTimeout() time.Duration {
-	return time.Duration(c.Dast.RedisReadTimeout) * time.Second
-}
-
-func (c *Config) DastPortScanTimeout() time.Duration {
-	return time.Duration(c.Dast.PortScanTimeout) * time.Second
 }

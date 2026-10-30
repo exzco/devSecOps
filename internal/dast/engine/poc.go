@@ -1,84 +1,154 @@
 package engine
 
 import (
-	"bufio"
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 
-	nuclei "github.com/projectdiscovery/nuclei/v3/lib"
-	"github.com/projectdiscovery/nuclei/v3/pkg/catalog/disk"
-	"github.com/projectdiscovery/nuclei/v3/pkg/output"
+	"github.com/chainreactors/neutron/protocols"
+	"github.com/chainreactors/neutron/templates"
 
-	"devsecops/internal/dast/logger"
+	"devsecops/internal/dast/model"
 )
 
-type Finding struct {
-	TemplateID string   `json:"templateId"`
-	Name       string   `json:"name"`
-	Severity   string   `json:"severity"`
-	Matched    string   `json:"matched"`
-	Tags       []string `json:"tags"`
-	Response   string   `json:"response,omitempty"`
+const DefaultPOCIndexFile = "poc_index.json"
+
+type RuleIndex struct {
+	mu    sync.RWMutex
+	specs []model.CheckSpec
 }
 
-func ScanWithTags(ctx context.Context, target string, tags []string, pocDir string) ([]Finding, error) {
-	logger.Printf("[poc] scanning target=%s tags=%v pocDir=%s\n", target, tags, pocDir)
-
-	if len(tags) == 0 {
-		tags = []string{"exposure", "misconfig", "config"}
+func NewRuleIndex(pocDir, indexFile string) *RuleIndex {
+	if pocDir == "" {
+		pocDir = "./pocs"
+	}
+	if indexFile == "" {
+		indexFile = DefaultPOCIndexFile
 	}
 
-	engine, err := nuclei.NewNucleiEngineCtx(ctx,
-		nuclei.WithCatalog(disk.NewCatalog(pocDir)),
-		nuclei.DisableUpdateCheck(),
-		nuclei.WithTemplatesOrWorkflows(nuclei.TemplateSources{
-			Templates: []string{pocDir},
-		}),
-	)
-	if err != nil {
-		return nil, err
+	idx := &RuleIndex{}
+
+	indexPath := filepath.Join(pocDir, indexFile)
+	if data, err := os.ReadFile(indexPath); err == nil {
+		var rawSpecs []struct {
+			ID          string   `json:"id"`
+			Name        string   `json:"name"`
+			Description string   `json:"description"`
+			Severity    string   `json:"severity"`
+			Tags        []string `json:"tags"`
+			FilePath    string   `json:"file_path"`
+		}
+		if json.Unmarshal(data, &rawSpecs) == nil {
+			for _, r := range rawSpecs {
+				sev := model.SeverityMedium
+				switch strings.ToUpper(r.Severity) {
+				case "CRITICAL":
+					sev = model.SeverityCritical
+				case "HIGH":
+					sev = model.SeverityHigh
+				case "LOW":
+					sev = model.SeverityLow
+				case "INFO":
+					sev = model.SeverityInfo
+				}
+
+				spec := model.CheckSpec{
+					ID:       r.ID,
+					Name:     r.Name,
+					FilePath: filepath.Join(pocDir, r.FilePath),
+					Severity: sev,
+					Tags:     r.Tags,
+				}
+				idx.AddSpec(spec)
+			}
+		}
 	}
-	defer engine.Close()
 
-	if err := engine.LoadAllTemplates(); err != nil {
-		if strings.Contains(err.Error(), "No templates available") {
-			logger.Printf("[poc] no templates found matching tags %v in %s\n", tags, pocDir)
-			return nil, nil
+	return idx
+}
+
+func (idx *RuleIndex) AddSpec(spec model.CheckSpec) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	idx.specs = append(idx.specs, spec)
+}
+
+func (idx *RuleIndex) SelectChecks(pol *model.Policy) []model.CheckSpec {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	var selected []model.CheckSpec
+	for _, spec := range idx.specs {
+		if passPolicy(spec, pol) {
+			selected = append(selected, spec)
 		}
-		return nil, err
+	}
+	return selected
+}
+
+func passPolicy(spec model.CheckSpec, pol *model.Policy) bool {
+	if pol == nil {
+		return true
+	}
+	for _, dt := range pol.DeniedTags {
+		for _, st := range spec.Tags {
+			if strings.EqualFold(dt, st) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func ExecuteChecks(ctx context.Context, specs []model.CheckSpec, scanRunID, targetURL string) ([]model.Finding, error) {
+	if len(specs) == 0 {
+		return nil, nil
 	}
 
-	reader := bufio.NewReader(strings.NewReader(target))
-	engine.LoadTargetsFromReader(reader, false)
+	var findings []model.Finding
 
-	var findings []Finding
+	for _, spec := range specs {
+		select {
+		case <-ctx.Done():
+			return findings, ctx.Err()
+		default:
+		}
 
-	err = engine.ExecuteCallbackWithCtx(ctx, func(ev *output.ResultEvent) {
-		if ev == nil || !ev.MatcherStatus {
-			return
+		pocPath := spec.FilePath
+		yamlBytes, err := os.ReadFile(pocPath)
+		if err != nil {
+			continue
 		}
-		resp := ev.Response
-		if len(resp) > 10240 {
-			resp = resp[:10240]
+
+		tmpl, err := templates.Load(yamlBytes)
+		if err != nil {
+			continue
 		}
-		findings = append(findings, Finding{
-			TemplateID: ev.TemplateID,
-			Name:       ev.Info.Name,
-			Severity:   ev.Info.SeverityHolder.Severity.String(),
-			Matched:    ev.Matched,
-			Tags:       tags,
-			Response:   resp,
+
+		_ = tmpl.Compile(&protocols.ExecuterOptions{
+			Options: &protocols.Options{},
 		})
-	})
 
-	if err != nil {
-		if strings.Contains(err.Error(), "No templates available") {
-			logger.Printf("[poc] no templates found matching tags %v\n", tags)
-			return findings, nil
+		res, err := tmpl.Execute(targetURL, nil)
+		if err == nil && res != nil && res.Matched {
+			finding := model.Finding{
+				ID:          model.NewUUID(),
+				ScanRunID:   scanRunID,
+				StableKey:   model.GenerateStableFindingKey(targetURL, targetURL, spec.ID, "", ""),
+				Title:       spec.Name,
+				Description: fmt.Sprintf("Neutron POC %s matched on %s", spec.ID, targetURL),
+				Severity:    spec.Severity,
+				CheckID:     spec.ID,
+				MatchedAt:   targetURL,
+			}
+			findings = append(findings, finding)
 		}
-		return findings, err
 	}
 
-	logger.Printf("[poc] target=%s found %d findings\n", target, len(findings))
 	return findings, nil
 }

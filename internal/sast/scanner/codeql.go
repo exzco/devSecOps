@@ -285,20 +285,15 @@ func (c *CodeQLRunner) resolveTargetPath(target string) string {
 
 func (c *CodeQLRunner) getDefaultQuerySuite(language string) string {
 	suiteMap := map[string]string{
-		"go":         "go\\ql\\src\\codeql-suites\\go-security-extended.qls",
-		"java":       "java\\ql\\src\\codeql-suites\\java-security-extended.qls",
-		"javascript": "javascript\\ql\\src\\codeql-suites\\javascript-security-extended.qls",
-		"python":     "python\\ql\\src\\codeql-suites\\python-security-extended.qls",
+		"go":         filepath.FromSlash("go/ql/src/codeql-suites/go-security-extended.qls"),
+		"java":       filepath.FromSlash("java/ql/src/codeql-suites/java-security-extended.qls"),
+		"javascript": filepath.FromSlash("javascript/ql/src/codeql-suites/javascript-security-extended.qls"),
+		"python":     filepath.FromSlash("python/ql/src/codeql-suites/python-security-extended.qls"),
 	}
 	if suite, ok := suiteMap[language]; ok {
 		return suite
 	}
 	return language + "-security-extended"
-}
-
-func (c *CodeQLRunner) Cleanup(taskID string) error {
-	taskDir := filepath.Join(c.workDir, taskID)
-	return os.RemoveAll(taskDir)
 }
 
 func (c *CodeQLRunner) CleanupGeneratedInputs(taskID string) error {
@@ -310,8 +305,4 @@ func (c *CodeQLRunner) CleanupGeneratedInputs(taskID string) error {
 		return err
 	}
 	return nil
-}
-
-func (c *CodeQLRunner) GetWorkDir(taskID string) string {
-	return filepath.Join(c.workDir, taskID)
 }

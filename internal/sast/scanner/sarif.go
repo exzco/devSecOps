@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"devsecops/internal/sast/contract"
 )
 
 type SARIFReport struct {
@@ -17,41 +19,37 @@ type SARIFReport struct {
 }
 
 type SARIFRun struct {
-	Tool       SARIFTool       `json:"tool"`
-	Results    []SARIFResult   `json:"results"`
-	Artifacts  []SARIFArtifact `json:"artifacts"`
-	Extensions []SARIFDriver   `json:"extensions"`
-}
-
-type SARIFTool struct {
-	Driver SARIFDriver `json:"driver"`
-}
-
-type SARIFDriver struct {
-	Name  string      `json:"name"`
-	Rules []SARIFRule `json:"rules"`
+	Tool struct {
+		Driver struct {
+			Rules []SARIFRule `json:"rules"`
+		} `json:"driver"`
+	} `json:"tool"`
+	Results   []SARIFResult `json:"results"`
+	Artifacts []struct {
+		Location struct {
+			URI string `json:"uri"`
+		} `json:"location"`
+	} `json:"artifacts"`
+	Extensions []struct {
+		Rules []SARIFRule `json:"rules"`
+	} `json:"extensions"`
 }
 
 type SARIFRule struct {
-	ID               string              `json:"id"`
-	Name             string              `json:"name"`
-	ShortDescription SARIFMessage        `json:"shortDescription"`
-	FullDescription  SARIFMessage        `json:"fullDescription"`
-	DefaultConfig    SARIFDefaultConfig  `json:"defaultConfiguration"`
-	Properties       SARIFRuleProperties `json:"properties"`
-}
-
-type SARIFDefaultConfig struct {
-	Level string `json:"level"`
-}
-
-type SARIFRuleProperties struct {
-	Tags     []string `json:"tags"`
-	Severity string   `json:"security-severity"`
-	Problem  struct {
-		Severity string `json:"severity"`
-	} `json:"problem"`
-	ProblemSeverity string `json:"problem.severity"`
+	ID               string       `json:"id"`
+	Name             string       `json:"name"`
+	ShortDescription SARIFMessage `json:"shortDescription"`
+	FullDescription  SARIFMessage `json:"fullDescription"`
+	DefaultConfig    struct {
+		Level string `json:"level"`
+	} `json:"defaultConfiguration"`
+	Properties struct {
+		Severity string `json:"security-severity"`
+		Problem  struct {
+			Severity string `json:"severity"`
+		} `json:"problem"`
+		ProblemSeverity string `json:"problem.severity"`
+	} `json:"properties"`
 }
 
 type SARIFMessage struct {
@@ -60,20 +58,16 @@ type SARIFMessage struct {
 }
 
 type SARIFResult struct {
-	RuleID              string            `json:"ruleId"`
-	RuleIndex           int               `json:"ruleIndex"`
-	Rule                *SARIFRuleRef     `json:"rule,omitempty"`
-	Message             SARIFMessage      `json:"message"`
-	Locations           []SARIFLocation   `json:"locations"`
-	RelatedLocations    []SARIFLocation   `json:"relatedLocations"`
-	CodeFlows           []SARIFCodeFlow   `json:"codeFlows"`
-	PartialFingerprints map[string]string `json:"partialFingerprints"`
-	Level               string            `json:"level"`
-}
-
-type SARIFRuleRef struct {
-	ID    string `json:"id"`
-	Index int    `json:"index"`
+	RuleID string `json:"ruleId"`
+	Rule   *struct {
+		ID string `json:"id"`
+	}
+	Message             SARIFMessage    `json:"message"`
+	Locations           []SARIFLocation `json:"locations"`
+	RelatedLocations    []SARIFLocation `json:"relatedLocations"`
+	CodeFlows           []SARIFCodeFlow `json:"codeFlows"`
+	PartialFingerprints map[string]string
+	Level               string `json:"level"`
 }
 
 type SARIFLocation struct {
@@ -82,27 +76,20 @@ type SARIFLocation struct {
 }
 
 type SARIFPhysicalLocation struct {
-	ArtifactLocation SARIFArtifactLocation `json:"artifactLocation"`
-	Region           SARIFRegion           `json:"region"`
-	ContextRegion    *SARIFRegion          `json:"contextRegion,omitempty"`
-}
-
-type SARIFArtifactLocation struct {
-	URI       string `json:"uri"`
-	URIBaseID string `json:"uriBaseId"`
-	Index     int    `json:"index"`
+	ArtifactLocation struct {
+		URI   string `json:"uri"`
+		Index int    `json:"index"`
+	} `json:"artifactLocation"`
+	Region        SARIFRegion  `json:"region"`
+	ContextRegion *SARIFRegion `json:"contextRegion,omitempty"`
 }
 
 type SARIFRegion struct {
-	StartLine   int           `json:"startLine"`
-	StartColumn int           `json:"startColumn"`
-	EndLine     int           `json:"endLine"`
-	EndColumn   int           `json:"endColumn"`
-	Snippet     *SARIFSnippet `json:"snippet,omitempty"`
-}
-
-type SARIFSnippet struct {
-	Text string `json:"text"`
+	StartLine int `json:"startLine"`
+	EndLine   int `json:"endLine"`
+	Snippet   *struct {
+		Text string `json:"text"`
+	} `json:"snippet,omitempty"`
 }
 
 type SARIFCodeFlow struct {
@@ -110,185 +97,140 @@ type SARIFCodeFlow struct {
 }
 
 type SARIFThreadFlow struct {
-	Locations []SARIFThreadFlowLocation `json:"locations"`
+	Locations []struct {
+		Location SARIFLocation `json:"location"`
+		Message  *SARIFMessage `json:"message,omitempty"`
+	} `json:"locations"`
 }
 
-type SARIFThreadFlowLocation struct {
-	Location SARIFLocation `json:"location"`
-	Message  *SARIFMessage `json:"message,omitempty"`
-}
-
-type SARIFArtifact struct {
-	Location SARIFArtifactLocation `json:"location"`
-}
-
-type ParsedVulnerability struct {
-	RuleID      string       `json:"rule_id"`
-	RuleName    string       `json:"rule_name"`
-	Severity    string       `json:"severity"`
-	FilePath    string       `json:"file_path"`
-	StartLine   int          `json:"start_line"`
-	EndLine     int          `json:"end_line"`
-	CodeSnippet string       `json:"code_snippet"`
-	Message     string       `json:"message"`
-	DataFlow    [][]FlowStep `json:"data_flow"`
-	Fingerprint string       `json:"fingerprint"`
-}
-
-type FlowStep struct {
-	FilePath  string `json:"file_path"`
-	StartLine int    `json:"start_line"`
-	EndLine   int    `json:"end_line"`
-	Message   string `json:"message"`
-	Snippet   string `json:"snippet"`
-}
+type ParsedVulnerability = contract.Vulnerability
+type FlowStep = contract.FlowStep
 
 func ParseSARIF(filePath string) ([]ParsedVulnerability, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read SARIF file: %w", err)
+		return nil, fmt.Errorf("read SARIF file: %w", err)
 	}
+	return ParseSARIFData(data)
+}
 
+func ParseSARIFData(data []byte) ([]ParsedVulnerability, error) {
 	var report SARIFReport
 	if err := json.Unmarshal(data, &report); err != nil {
-		return nil, fmt.Errorf("failed to parse SARIF JSON: %w", err)
+		return nil, fmt.Errorf("parse SARIF JSON: %w", err)
 	}
 
-	var vulns []ParsedVulnerability
-
+	var vulnerabilities []ParsedVulnerability
 	for _, run := range report.Runs {
-		ruleMap := buildRuleMap(run)
-		artifactMap := buildArtifactMap(run.Artifacts)
+		rules := buildRuleMap(run)
+		artifacts := make(map[int]string, len(run.Artifacts))
+		for index, artifact := range run.Artifacts {
+			if artifact.Location.URI != "" {
+				artifacts[index] = artifact.Location.URI
+			}
+		}
 
 		for _, result := range run.Results {
-			ruleID := resolveRuleID(result)
-			msg := firstNonEmpty(result.Message.Text, result.Message.Markdown)
-
-			vuln := ParsedVulnerability{
-				RuleID:  ruleID,
-				Message: msg,
+			ruleID := result.RuleID
+			if ruleID == "" && result.Rule != nil {
+				ruleID = result.Rule.ID
 			}
-
-			if rule, ok := ruleMap[ruleID]; ok {
-				vuln.RuleName = firstNonEmpty(
+			if ruleID == "" {
+				ruleID = "unknown-rule"
+			}
+			vulnerability := ParsedVulnerability{
+				RuleID:  ruleID,
+				Message: firstNonEmpty(result.Message.Text, result.Message.Markdown),
+			}
+			if rule, ok := rules[ruleID]; ok {
+				vulnerability.RuleName = firstNonEmpty(
 					rule.ShortDescription.Text,
 					rule.Name,
 					rule.FullDescription.Text,
 					rule.ID,
 				)
-				vuln.Severity = mapSeverity(rule, result.Level)
+				vulnerability.Severity = ruleSeverity(rule, result.Level)
 			} else {
-				vuln.Severity = mapLevelToSeverity(result.Level)
+				vulnerability.Severity = levelSeverity(result.Level)
 			}
-			if vuln.RuleName == "" {
-				vuln.RuleName = vuln.RuleID
+			if vulnerability.RuleName == "" {
+				vulnerability.RuleName = ruleID
 			}
 
-			if loc, ok := pickPrimaryLocation(result); ok {
-				vuln.FilePath = resolveArtifactURI(loc.ArtifactLocation, artifactMap)
-				vuln.StartLine = loc.Region.StartLine
-				vuln.EndLine = loc.Region.EndLine
-				if vuln.EndLine == 0 {
-					vuln.EndLine = vuln.StartLine
+			if location, ok := primaryLocation(result); ok {
+				vulnerability.FilePath = artifactURI(
+					location.ArtifactLocation.URI,
+					location.ArtifactLocation.Index,
+					artifacts,
+				)
+				vulnerability.StartLine = location.Region.StartLine
+				vulnerability.EndLine = location.Region.EndLine
+				if vulnerability.EndLine == 0 {
+					vulnerability.EndLine = vulnerability.StartLine
 				}
-				if loc.ContextRegion != nil && loc.ContextRegion.Snippet != nil {
-					vuln.CodeSnippet = loc.ContextRegion.Snippet.Text
-				} else if loc.Region.Snippet != nil {
-					vuln.CodeSnippet = loc.Region.Snippet.Text
+				if location.ContextRegion != nil && location.ContextRegion.Snippet != nil {
+					vulnerability.CodeSnippet = location.ContextRegion.Snippet.Text
+				} else if location.Region.Snippet != nil {
+					vulnerability.CodeSnippet = location.Region.Snippet.Text
 				}
 			}
-			vuln.FilePath = normalizePath(vuln.FilePath)
+			vulnerability.FilePath = normalizePath(vulnerability.FilePath)
+			vulnerability.DataFlow = dataFlow(result.CodeFlows, artifacts)
 
-			vuln.DataFlow = extractDataFlow(result.CodeFlows, artifactMap)
-
-			if fp, ok := result.PartialFingerprints["primaryLocationLineHash"]; ok {
-				vuln.Fingerprint = fp
+			if fingerprint := result.PartialFingerprints["primaryLocationLineHash"]; fingerprint != "" {
+				vulnerability.Fingerprint = fingerprint
 			} else {
-				// 只用位置信息生成 fingerprint，避免因 message 含数据流路径描述不同而产生重复记录
-				base := fmt.Sprintf("%s|%s|%d|%d", vuln.RuleID, vuln.FilePath, vuln.StartLine, vuln.EndLine)
-				h := sha1.Sum([]byte(base))
-				vuln.Fingerprint = fmt.Sprintf("%x", h)
+				base := fmt.Sprintf("%s|%s|%d|%d",
+					vulnerability.RuleID,
+					vulnerability.FilePath,
+					vulnerability.StartLine,
+					vulnerability.EndLine,
+				)
+				hash := sha1.Sum([]byte(base))
+				vulnerability.Fingerprint = fmt.Sprintf("%x", hash)
 			}
-
-			vulns = append(vulns, vuln)
+			vulnerabilities = append(vulnerabilities, vulnerability)
 		}
 	}
-
-	// 对同一 Sink 位置的多条数据流路径进行合并去重
-	vulns = deduplicateVulns(vulns)
-
-	return vulns, nil
+	return deduplicate(vulnerabilities), nil
 }
 
-// deduplicateVulns 将同一规则、同一文件、同一行的漏洞合并为一条记录。
-// CodeQL 会对每条从 Source 到 Sink 的数据流路径各生成一个 Result，
-// 导致同一个漏洞点出现多次。此函数将多条路径合并到 DataFlow 数组中保留，
-// 前端可按需展开查看所有追踪路径。
-func deduplicateVulns(vulns []ParsedVulnerability) []ParsedVulnerability {
-	type sinkKey struct {
+func deduplicate(vulnerabilities []ParsedVulnerability) []ParsedVulnerability {
+	type key struct {
 		ruleID    string
 		filePath  string
 		startLine int
 	}
-
-	indexMap := make(map[sinkKey]int, len(vulns))
-	result := make([]ParsedVulnerability, 0, len(vulns))
-
-	for _, v := range vulns {
-		k := sinkKey{ruleID: v.RuleID, filePath: v.FilePath, startLine: v.StartLine}
-		if idx, exists := indexMap[k]; exists {
-			// 已存在相同 Sink 的记录：将新数据流路径追加合并
-			result[idx].DataFlow = append(result[idx].DataFlow, v.DataFlow...)
-		} else {
-			indexMap[k] = len(result)
-			result = append(result, v)
+	indexes := make(map[key]int, len(vulnerabilities))
+	result := make([]ParsedVulnerability, 0, len(vulnerabilities))
+	for _, vulnerability := range vulnerabilities {
+		k := key{vulnerability.RuleID, vulnerability.FilePath, vulnerability.StartLine}
+		if index, exists := indexes[k]; exists {
+			result[index].DataFlow = append(result[index].DataFlow, vulnerability.DataFlow...)
+			continue
 		}
+		indexes[k] = len(result)
+		result = append(result, vulnerability)
 	}
-
 	return result
 }
 
 func buildRuleMap(run SARIFRun) map[string]SARIFRule {
-	total := len(run.Tool.Driver.Rules)
-	for _, ext := range run.Extensions {
-		total += len(ext.Rules)
+	rules := make(map[string]SARIFRule)
+	for _, rule := range run.Tool.Driver.Rules {
+		rules[rule.ID] = rule
 	}
-
-	m := make(map[string]SARIFRule, total)
-	for _, r := range run.Tool.Driver.Rules {
-		m[r.ID] = r
-	}
-	for _, ext := range run.Extensions {
-		for _, r := range ext.Rules {
-			if _, exists := m[r.ID]; !exists {
-				m[r.ID] = r
+	for _, extension := range run.Extensions {
+		for _, rule := range extension.Rules {
+			if _, exists := rules[rule.ID]; !exists {
+				rules[rule.ID] = rule
 			}
 		}
 	}
-	return m
+	return rules
 }
 
-func buildArtifactMap(artifacts []SARIFArtifact) map[int]string {
-	m := make(map[int]string, len(artifacts))
-	for i, a := range artifacts {
-		if a.Location.URI != "" {
-			m[i] = a.Location.URI
-		}
-	}
-	return m
-}
-
-func resolveRuleID(result SARIFResult) string {
-	if result.RuleID != "" {
-		return result.RuleID
-	}
-	if result.Rule != nil && result.Rule.ID != "" {
-		return result.Rule.ID
-	}
-	return "unknown-rule"
-}
-
-func pickPrimaryLocation(result SARIFResult) (SARIFPhysicalLocation, bool) {
+func primaryLocation(result SARIFResult) (SARIFPhysicalLocation, bool) {
 	if len(result.Locations) > 0 {
 		return result.Locations[0].PhysicalLocation, true
 	}
@@ -298,61 +240,51 @@ func pickPrimaryLocation(result SARIFResult) (SARIFPhysicalLocation, bool) {
 	return SARIFPhysicalLocation{}, false
 }
 
-func resolveArtifactURI(loc SARIFArtifactLocation, artifacts map[int]string) string {
-	if loc.URI != "" {
-		return loc.URI
-	}
-	if uri, ok := artifacts[loc.Index]; ok {
+func artifactURI(uri string, index int, artifacts map[int]string) string {
+	if uri != "" {
 		return uri
 	}
-	return ""
+	return artifacts[index]
 }
 
 func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
 		}
 	}
 	return ""
 }
 
-func mapSeverity(rule SARIFRule, level string) string {
-	if rule.Properties.Severity != "" {
-		return securityScoreToSeverity(rule.Properties.Severity)
+func ruleSeverity(rule SARIFRule, level string) string {
+	for _, value := range []string{
+		rule.Properties.Severity,
+		rule.Properties.ProblemSeverity,
+		rule.Properties.Problem.Severity,
+		rule.DefaultConfig.Level,
+	} {
+		if value != "" {
+			if score, err := strconv.ParseFloat(value, 64); err == nil {
+				switch {
+				case score >= 9:
+					return "critical"
+				case score >= 7:
+					return "high"
+				case score >= 4:
+					return "medium"
+				case score >= 0.1:
+					return "low"
+				default:
+					return "info"
+				}
+			}
+			return levelSeverity(value)
+		}
 	}
-	if rule.Properties.ProblemSeverity != "" {
-		return mapLevelToSeverity(rule.Properties.ProblemSeverity)
-	}
-	if rule.Properties.Problem.Severity != "" {
-		return mapLevelToSeverity(rule.Properties.Problem.Severity)
-	}
-	if rule.DefaultConfig.Level != "" {
-		return mapLevelToSeverity(rule.DefaultConfig.Level)
-	}
-	return mapLevelToSeverity(level)
+	return levelSeverity(level)
 }
 
-func securityScoreToSeverity(score string) string {
-	s, err := strconv.ParseFloat(strings.TrimSpace(score), 64)
-	if err != nil {
-		return "info"
-	}
-	switch {
-	case s >= 9.0:
-		return "critical"
-	case s >= 7.0:
-		return "high"
-	case s >= 4.0:
-		return "medium"
-	case s >= 0.1:
-		return "low"
-	default:
-		return "info"
-	}
-}
-
-func mapLevelToSeverity(level string) string {
+func levelSeverity(level string) string {
 	switch strings.ToLower(level) {
 	case "error":
 		return "high"
@@ -365,27 +297,32 @@ func mapLevelToSeverity(level string) string {
 	}
 }
 
-func extractDataFlow(codeFlows []SARIFCodeFlow, artifacts map[int]string) [][]FlowStep {
+func dataFlow(codeFlows []SARIFCodeFlow, artifacts map[int]string) [][]FlowStep {
 	var paths [][]FlowStep
-	for _, cf := range codeFlows {
-		for _, tf := range cf.ThreadFlows {
+	for _, codeFlow := range codeFlows {
+		for _, thread := range codeFlow.ThreadFlows {
 			var steps []FlowStep
-			for _, loc := range tf.Locations {
+			for _, item := range thread.Locations {
+				location := item.Location
 				step := FlowStep{
-					FilePath:  normalizePath(resolveArtifactURI(loc.Location.PhysicalLocation.ArtifactLocation, artifacts)),
-					StartLine: loc.Location.PhysicalLocation.Region.StartLine,
-					EndLine:   loc.Location.PhysicalLocation.Region.EndLine,
+					FilePath: normalizePath(artifactURI(
+						location.PhysicalLocation.ArtifactLocation.URI,
+						location.PhysicalLocation.ArtifactLocation.Index,
+						artifacts,
+					)),
+					StartLine: location.PhysicalLocation.Region.StartLine,
+					EndLine:   location.PhysicalLocation.Region.EndLine,
 				}
 				if step.EndLine == 0 {
 					step.EndLine = step.StartLine
 				}
-				if loc.Location.Message != nil {
-					step.Message = firstNonEmpty(loc.Location.Message.Text, loc.Location.Message.Markdown)
-				} else if loc.Message != nil {
-					step.Message = firstNonEmpty(loc.Message.Text, loc.Message.Markdown)
+				if location.Message != nil {
+					step.Message = firstNonEmpty(location.Message.Text, location.Message.Markdown)
+				} else if item.Message != nil {
+					step.Message = firstNonEmpty(item.Message.Text, item.Message.Markdown)
 				}
-				if loc.Location.PhysicalLocation.Region.Snippet != nil {
-					step.Snippet = loc.Location.PhysicalLocation.Region.Snippet.Text
+				if location.PhysicalLocation.Region.Snippet != nil {
+					step.Snippet = location.PhysicalLocation.Region.Snippet.Text
 				}
 				steps = append(steps, step)
 			}
@@ -397,12 +334,12 @@ func extractDataFlow(codeFlows []SARIFCodeFlow, artifacts map[int]string) [][]Fl
 	return paths
 }
 
-func normalizePath(p string) string {
-	p = strings.TrimSpace(p)
-	p = strings.TrimPrefix(p, "file://")
-	p = strings.TrimPrefix(p, "file:///")
-	if p == "" {
-		return p
+func normalizePath(path string) string {
+	path = strings.TrimSpace(path)
+	path = strings.TrimPrefix(path, "file://")
+	path = strings.TrimPrefix(path, "file:///")
+	if path == "" {
+		return ""
 	}
-	return filepath.ToSlash(p)
+	return filepath.ToSlash(path)
 }

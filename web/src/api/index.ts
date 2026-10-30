@@ -7,16 +7,16 @@ const api = axios.create({
 // ==================== SAST API ====================
 
 export const getRepoList = (page = 1, perPage = 20) =>
-  api.get(`/repos/list?page=${page}&per_page=${perPage}`);
+  api.get(`/repos?page=${page}&per_page=${perPage}`);
 
 export const addRepo = (data: any) =>
   api.post('/repos', data);
 
 export const updateRepo = (id: number, data: any) =>
-  api.post(`/repos/update/${id}`, data);
+  api.put(`/repos/${id}`, data);
 
 export const deleteRepo = (id: number) =>
-  api.post(`/repos/delete/${id}`);
+  api.delete(`/repos/${id}`);
 
 export const batchDeleteRepos = (ids: number[]) =>
   api.post('/repos/batch-delete', { ids });
@@ -28,14 +28,13 @@ export interface TriggerScanPayload {
   query_suite?: string;
   rule_profile?: string;
   rules?: string[];
-  use_ai_verification?: boolean;
 }
 
 export const triggerScan = (payload: TriggerScanPayload) =>
-  api.post('/scan/tasks', payload);
+  api.post('/scans', { ...payload, type: 'sast' });
 
 export const deleteScanTask = (taskId: number) =>
-  api.post(`/scan/tasks/delete/${taskId}`);
+  api.delete(`/scan/tasks/${taskId}`);
 
 export const getScanTasks = (page = 1, perPage = 20, repoId?: number, status?: string) => {
   const params = new URLSearchParams({
@@ -46,7 +45,7 @@ export const getScanTasks = (page = 1, perPage = 20, repoId?: number, status?: s
   if (repoId) params.append('repo_id', String(repoId));
   if (status) params.append('status', status);
 
-  return api.get(`/scan/ListTasks?${params.toString()}`);
+  return api.get(`/scan/tasks?${params.toString()}`);
 };
 
 export const getScanVulnerabilities = (taskId: number, page = 1, perPage = 20) =>
@@ -58,14 +57,18 @@ export const getScanTaskLogs = (taskId: number) =>
 // ==================== DAST APIs ====================
 
 export interface CreateDastPayload {
-  task_id?: string;
   task_name?: string;
   ips: string;
   ports?: string;
 }
 
 export const createDastTask = (payload: CreateDastPayload) =>
-  api.post('/dast/scan/tasks', payload);
+  api.post('/scans', {
+    type: 'dast',
+    task_name: payload.task_name,
+    target: payload.ips,
+    ports: payload.ports,
+  });
 
 export const getDastTasks = () =>
   api.get('/dast/scan/tasks');
@@ -77,10 +80,7 @@ export const getDastTaskResults = (taskId: string) =>
   api.get(`/dast/scan/tasks/${taskId}/results`);
 
 export const deleteDastTask = (taskId: string) =>
-  api.post(`/dast/scan/tasks/delete/${taskId}`);
-
-export const stopDastTask = (taskId: string) =>
-  api.post(`/dast/scan/tasks/stop/${taskId}`);
+  api.delete(`/dast/scan/tasks/${taskId}`);
 
 export const getDastTaskAssets = (taskId: string) =>
   api.get(`/dast/scan/tasks/${taskId}/assets`);
@@ -101,26 +101,33 @@ export const createDastConfig = (payload: CreateConfigPayload) =>
   api.post('/dast/scan/configs', payload);
 
 export const deleteDastConfig = (configId: string) =>
-  api.post(`/dast/scan/configs/delete/${configId}`);
+  api.delete(`/dast/scan/configs/${configId}`);
 
 export const updateDastConfig = (configId: string, payload: CreateConfigPayload) =>
   api.post(`/dast/scan/configs/update/${configId}`, payload);
 
+// ==================== SCA 依赖与漏洞分析 APIs ====================
 
-// ==================== DAST PoC APIs ====================
-export const getDastPocList = () =>
-  api.get('/dast/pocs');
+export interface CreateScaPayload {
+  repo_id?: number;
+  branch?: string;
+  language?: string;
+  target?: string;
+}
 
-export const getDastPoc = (id: string) =>
-  api.get(`/dast/pocs/${id}`);
+export const createScaTask = (payload: CreateScaPayload) =>
+  api.post('/scans', { ...payload, type: 'sca' });
 
-export const createDastPoc = (data: any) =>
-  api.post('/dast/pocs', data);
+export const getScaTasks = (page = 1, pageSize = 20) =>
+  api.get(`/sca/tasks?page=${page}&page_size=${pageSize}`);
 
-export const updateDastPoc = (id: string, data: any) =>
-  api.post(`/dast/pocs/update/${id}`, data);
+export const getScaTaskDetail = (id: number) =>
+  api.get(`/sca/tasks/${id}`);
 
-export const deleteDastPoc = (id: string) =>
-  api.post(`/dast/pocs/delete/${id}`);
+export const getScaDependencies = (id: number) =>
+  api.get(`/sca/tasks/${id}/dependencies`);
+
+export const getScaVulnerabilities = (id: number) =>
+  api.get(`/sca/tasks/${id}/vulnerabilities`);
 
 export default api;

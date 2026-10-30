@@ -21,9 +21,13 @@ func NewRepoHandler(repoSvc *service.RepoService) *RepoHandler {
 }
 
 func (h *RepoHandler) CreateRepos(c *gin.Context) {
-	var req model.CreateRepoRequest
+	var req model.RepoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Name == "" || req.URL == "" || req.Language == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name, url and language are required"})
 		return
 	}
 
@@ -49,10 +53,12 @@ func (h *RepoHandler) ListRepos(c *gin.Context) {
 }
 
 func (h *RepoHandler) UpdateRepos(c *gin.Context) {
-	idStr := c.Param("id")
-	id, _ := strconv.ParseUint(idStr, 10, 32)
+	id, ok := parseRepoID(c)
+	if !ok {
+		return
+	}
 
-	var req model.UpdateRepoRequest
+	var req model.RepoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -67,10 +73,12 @@ func (h *RepoHandler) UpdateRepos(c *gin.Context) {
 }
 
 func (h *RepoHandler) DeleteRepos(c *gin.Context) {
-	idStr := c.Param("id")
-	id, _ := strconv.ParseUint(idStr, 10, 32)
+	id, ok := parseRepoID(c)
+	if !ok {
+		return
+	}
 
-	if err := h.repoSvc.Delete(uint(id)); err != nil {
+	if err := h.repoSvc.Delete(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -78,8 +86,19 @@ func (h *RepoHandler) DeleteRepos(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "仓库删除成功"})
 }
 
+func parseRepoID(c *gin.Context) (uint, bool) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid repository id"})
+		return 0, false
+	}
+	return uint(id), true
+}
+
 func (h *RepoHandler) BatchDeleteRepos(c *gin.Context) {
-	var req model.BatchDeleteReposRequest
+	var req struct {
+		IDs []uint `json:"ids" binding:"required,min=1"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

@@ -1,40 +1,6 @@
 package model
 
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
-
-// User roles
-const (
-	RoleAdmin     = "admin"
-	RoleSecurity  = "security"
-	RoleDeveloper = "developer"
-)
-
-type User struct {
-	ID           uint           `json:"id" gorm:"primaryKey"`
-	Username     string         `json:"username" gorm:"size:128;uniqueIndex;not null"`
-	Email        string         `json:"email" gorm:"size:256"`
-	Role         string         `json:"role" gorm:"size:32;default:developer"`
-	PasswordHash string         `json:"-" gorm:"size:256"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
-}
-
-type AuditLog struct {
-	ID              uint      `json:"id" gorm:"primaryKey"`
-	VulnerabilityID uint      `json:"vulnerability_id" gorm:"index"`
-	OperatorID      uint      `json:"operator_id"` // 0 = AI
-	Operator        *User     `json:"operator,omitempty" gorm:"foreignKey:OperatorID"`
-	Action          string    `json:"action" gorm:"size:64"`
-	OldStatus       string    `json:"old_status" gorm:"size:32"`
-	NewStatus       string    `json:"new_status" gorm:"size:32"`
-	Comment         string    `json:"comment" gorm:"type:text"`
-	CreatedAt       time.Time `json:"created_at"`
-}
+import "math"
 
 // PaginatedResponse wraps paginated results
 type PaginatedResponse struct {
@@ -45,9 +11,23 @@ type PaginatedResponse struct {
 	TotalPages int         `json:"total_pages"`
 }
 
-// APIResponse is the standard API response
-type APIResponse struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+func NormalizePagination(page, perPage int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 20
+	}
+	return page, perPage
+}
+
+func NewPaginatedResponse(data any, total int64, page, perPage int) *PaginatedResponse {
+	page, perPage = NormalizePagination(page, perPage)
+	return &PaginatedResponse{
+		Data:       data,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: int(math.Ceil(float64(total) / float64(perPage))),
+	}
 }

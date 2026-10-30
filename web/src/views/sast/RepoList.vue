@@ -10,12 +10,12 @@
             @confirm="handleBatchDelete"
           >
             <a-button type="primary" danger :disabled="selectedRowKeys.length === 0">
-              <template #icon><DeleteOutlined /></template>
+              <template #icon><Trash2 :size="14" class="inline-block" /></template>
               批量删除
             </a-button>
           </a-popconfirm>
           <a-button type="primary" @click="handleOpenAdd">
-            <template #icon><PlusOutlined /></template>
+            <template #icon><Plus :size="14" class="inline-block" /></template>
             添加仓库
           </a-button>
         </a-space>
@@ -44,16 +44,16 @@
             <template v-if="column.key === 'actions'">
               <a-space :size="12">
                 <a-button type="link" size="small" @click="handleScan(record)">
-                  <template #icon><PlayCircleOutlined /></template>
+                  <template #icon><Play :size="14" class="inline-block" /></template>
                   开始扫描
                 </a-button>
                 <a-button type="link" class="!text-amber-400 hover:!text-amber-300" size="small" @click="handleOpenEdit(record)">
-                  <template #icon><EditOutlined /></template>
+                  <template #icon><Pencil :size="14" class="inline-block" /></template>
                   修改
                 </a-button>
                 <a-popconfirm title="确定要删除这个仓库吗？" ok-text="确认" cancel-text="取消" @confirm="handleDelete(record.id)">
                   <a-button type="link" danger size="small">
-                    <template #icon><DeleteOutlined /></template>
+                    <template #icon><Trash2 :size="14" class="inline-block" /></template>
                     删除
                   </a-button>
                 </a-popconfirm>
@@ -91,9 +91,6 @@
           </a-form-item>
           <a-form-item label="扫描分支">
             <a-input v-model:value="form.branch" :maxlength="128" placeholder="默认为 main" />
-          </a-form-item>
-          <a-form-item label="Stars">
-            <a-input-number v-model:value="form.stars" :min="0" class="w-full" />
           </a-form-item>
           <a-form-item label="认证类型">
             <a-select v-model:value="form.auth_type" placeholder="请选择认证类型">
@@ -164,16 +161,6 @@
             <a-input v-model:value="scanForm.query_suite" :maxlength="512" placeholder="支持逗号分隔多个规则路径，如: rules/codeql/rce.ql" />
           </a-form-item>
 
-          <div class="pt-2 border-t border-zinc-100">
-            <div class="text-xs font-bold text-zinc-700 mb-2">测试选项</div>
-            <div class="flex items-center gap-3">
-              <a-switch v-model:checked="scanForm.use_ai_verification" />
-              <span class="text-xs text-zinc-600 font-medium">AI 验证</span>
-            </div>
-            <div class="mt-1 text-zinc-400 text-[11px]">
-              启动后调用 LLM 对检测出的漏洞进行进一步验证
-            </div>
-          </div>
         </a-form>
       </div>
     </a-modal>
@@ -181,14 +168,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
-import { 
-  PlusOutlined, 
-  DeleteOutlined, 
-  PlayCircleOutlined, 
-  EditOutlined 
-} from '@ant-design/icons-vue';
+import { Plus, Trash2, Play, Pencil } from 'lucide-vue-next';
 import { 
   addRepo, 
   batchDeleteRepos, 
@@ -208,8 +190,6 @@ interface RepoRecord {
   url: string;
   language: RepoLanguage;
   branch: string;
-  stars?: number;
-  auto_scan_enabled?: boolean;
   auth_type: AuthType;
 }
 
@@ -218,7 +198,6 @@ interface RepoForm {
   url: string;
   language: RepoLanguage;
   branch: string;
-  stars: number;
   auth_type: AuthType;
   auth_secret: string;
 }
@@ -226,7 +205,6 @@ interface RepoForm {
 interface ScanForm {
   rule_profile: RuleProfile;
   query_suite: string;
-  use_ai_verification: boolean;
   rules: {
     cwe078: boolean;
     cwe502: boolean;
@@ -292,7 +270,6 @@ const initialForm: RepoForm = {
   url: '',
   language: 'go',
   branch: 'main',
-  stars: 0,
   auth_type: 'none',
   auth_secret: '',
 };
@@ -303,7 +280,6 @@ const columns = [
   { title: '名称', dataIndex: 'name', key: 'name', width: 150, ellipsis: true },
   { title: 'Git 地址', dataIndex: 'url', key: 'url', width: 280, ellipsis: true },
   { title: '语言', dataIndex: 'language', key: 'language', width: 90 },
-  { title: 'Stars', dataIndex: 'stars', key: 'stars', width: 80 },
   { title: '分支', dataIndex: 'branch', key: 'branch', width: 100 },
   { title: '认证方式', dataIndex: 'auth_type', key: 'auth_type', width: 100 },
   { title: '操作', key: 'actions', width: 220, fixed: 'right', align: 'center' as const },
@@ -318,7 +294,6 @@ const scanTarget = ref<RepoRecord | null>(null);
 const scanForm = reactive<ScanForm>({
   rule_profile: 'baseline',
   query_suite: '',
-  use_ai_verification: false,
   rules: {
     cwe078: true,
     cwe502: false,
@@ -362,7 +337,6 @@ const handleOpenEdit = (record: RepoRecord) => {
     url: record.url,
     language: record.language,
     branch: record.branch,
-    stars: record.stars ?? 0,
     auth_type: record.auth_type,
     auth_secret: '',
   });
@@ -402,7 +376,6 @@ const handleConfirm = async () => {
     url: form.url,
     language: form.language,
     branch: form.branch,
-    stars: Number(form.stars) || 0,
     auth_type: form.auth_type,
     ...(form.auth_type !== 'none' && form.auth_secret ? { auth_secret: form.auth_secret } : {}),
   };
@@ -453,7 +426,6 @@ const handleScan = (record: RepoRecord) => {
   scanTarget.value = record;
   scanForm.query_suite = '';
   scanForm.rule_profile = 'baseline';
-  scanForm.use_ai_verification = false;
   scanForm.rules.cwe078 = true;
   scanForm.rules.cwe502 = false;
   scanForm.rules.cwe094 = true;
@@ -490,7 +462,6 @@ const handleConfirmScan = async () => {
       rule_profile: scanForm.rule_profile || undefined,
       query_suite: normalizedQuerySuite || undefined,
       rules: selectedRules.length > 0 ? selectedRules : undefined,
-      use_ai_verification: scanForm.use_ai_verification,
     });
     scanVisible.value = false;
     message.success(`已触发扫描：${scanTarget.value.name}`);

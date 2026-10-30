@@ -78,13 +78,14 @@
       <div class="flex items-center justify-between border-b border-zinc-200 pb-3 bg-white">
         <div class="flex items-center gap-3">
           <a-button type="default" size="small" @click="exitDetailView" class="!bg-white !border-zinc-200">
-            <template #icon><ArrowLeftOutlined /></template>
+            <template #icon><ArrowLeft :size="14" class="inline-block" /></template>
             返回任务列表
           </a-button>
           <span class="text-md font-bold text-zinc-900">扫描结果 (任务 ID: {{ viewingTaskId }})</span>
         </div>
         <a-space>
           <a-button type="default" size="small" @click="loadVulnerabilities">
+            <template #icon><RotateCw :size="14" class="inline-block" /></template>
             刷新
           </a-button>
         </a-space>
@@ -106,9 +107,6 @@
             >
               <div class="flex items-center gap-1 flex-1 truncate pr-2">
                 <span class="font-mono text-xs text-zinc-800 truncate">{{ item.rule_id }}</span>
-                <a-tag v-if="getAiTagInfo(item)" :color="getAiTagInfo(item)!.color" class="font-bold scale-90 shrink-0 border-none px-1.5">
-                  {{ getAiTagInfo(item)!.text }}
-                </a-tag>
               </div>
               <a-tag :color="severityColor(item.severity)" class="font-semibold uppercase scale-90 scale-origin-right">
                 {{ item.severity }}
@@ -145,7 +143,7 @@
             </div>
           </div>
 
-          <!-- Bottom part: Taint Flow trace steps & AI Audit Result -->
+          <!-- Bottom part: Taint Flow trace steps -->
           <div class="h-[280px] border border-zinc-200 rounded-lg bg-white flex flex-col overflow-hidden">
             <a-tabs v-model:activeKey="bottomTabKey" class="flex-1 flex flex-col px-3 pt-1 border-b-none" size="small">
               <a-tab-pane key="taint" tab="污点追踪分析 (Taint Flow Trace)">
@@ -173,75 +171,6 @@
                 </div>
               </a-tab-pane>
 
-              <a-tab-pane key="ai" tab=" AI 分析">
-                <div class="p-3 overflow-y-auto max-h-[260px] scrollbar-thin text-xs leading-relaxed select-text">
-                  <div v-if="!parsedAiResult" class="h-full py-8 text-center text-zinc-400 text-xs">
-                    暂无 AI 验证结果。
-                  </div>
-                  <div v-else class="flex flex-col gap-3">
-                    <!-- 1. 漏洞概述 -->
-                    <div v-if="parsedAiResult.vulnerability_analysis || parsedAiResult.vulnerability_report" class="bg-purple-50/50 p-3 rounded border border-purple-100">
-                      <div class="font-bold text-purple-900 mb-1 flex items-center gap-1.5">
-                        <span>📋</span>
-                        <span>漏洞概述 (Vulnerability Analysis)</span>
-                        <a-tag v-if="parsedAiResult.confidence" color="purple" class="ml-auto scale-90">
-                          置信度: {{ parsedAiResult.confidence }}
-                        </a-tag>
-                        <a-tag v-if="parsedAiResult.is_false_positive !== undefined" :color="parsedAiResult.is_false_positive ? 'red' : 'green'" class="scale-90">
-                          {{ parsedAiResult.is_false_positive ? '误报' : '确认漏洞' }}
-                        </a-tag>
-                      </div>
-                      <div class="text-zinc-700 whitespace-pre-wrap leading-relaxed">
-                        {{ parsedAiResult.vulnerability_analysis || parsedAiResult.vulnerability_report }}
-                      </div>
-                    </div>
-
-                    <!-- 2. 复现步骤 -->
-                    <div v-if="parsedAiResult.manual_poc || parsedAiResult.reproduce_steps" class="bg-amber-50/50 p-3 rounded border border-amber-100">
-                      <div class="font-bold text-amber-900 mb-1 flex items-center justify-between">
-                        <span class="flex items-center gap-1.5">
-                          <span>🛠️</span>
-                          <span>复现步骤 (Manual PoC / Verification)</span>
-                        </span>
-                        <a-button 
-                          v-if="parsedAiResult.manual_poc || parsedAiResult.reproduce_steps" 
-                          type="link" 
-                          size="small" 
-                          class="!text-xs !p-0 !text-amber-700 font-normal"
-                          @click="copyScript(parsedAiResult.manual_poc || parsedAiResult.reproduce_steps)"
-                        >
-                          复制 PoC
-                        </a-button>
-                      </div>
-                      <div class="text-zinc-800 whitespace-pre-wrap font-mono text-[11px] bg-white p-2.5 rounded border border-amber-200/60 overflow-x-auto select-all">
-                        {{ parsedAiResult.manual_poc || parsedAiResult.reproduce_steps }}
-                      </div>
-                    </div>
-
-                    <!-- 3. 解决这个问题 / 修复建议 -->
-                    <div v-if="parsedAiResult.remediation_suggestion || parsedAiResult.verify_steps" class="bg-emerald-50/50 p-3 rounded border border-emerald-100">
-                      <div class="font-bold text-emerald-900 mb-1 flex items-center gap-1.5">
-                        <span>💡</span>
-                        <span>修复建议 (Remediation Suggestion)</span>
-                      </div>
-                      <div class="text-zinc-700 whitespace-pre-wrap leading-relaxed">
-                        {{ parsedAiResult.remediation_suggestion || parsedAiResult.verify_steps }}
-                      </div>
-                    </div>
-
-                    <!-- 4. WSL Docker 复现环境 (可选) -->
-                    <div v-if="parsedAiResult.wsl_docker_script" class="bg-zinc-950 text-zinc-100 p-3 rounded font-mono text-[11px] relative">
-                      <div class="flex items-center justify-between border-b border-zinc-800 pb-1 mb-2 text-zinc-400 text-[10px]">
-                        <span>🐳 WSL Docker 靶场复现脚本</span>
-                        <a-button type="link" size="small" class="!text-xs !p-0 !text-purple-400" @click="copyScript(parsedAiResult.wsl_docker_script)">
-                          复制脚本
-                        </a-button>
-                      </div>
-                      <pre class="whitespace-pre-wrap break-all select-all text-emerald-400">{{ parsedAiResult.wsl_docker_script }}</pre>
-                    </div>
-                  </div>
-                </div>
-              </a-tab-pane>
             </a-tabs>
           </div>
         </div>
@@ -289,16 +218,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
-import { 
-  ArrowLeftOutlined 
-} from '@ant-design/icons-vue';
+import { ArrowLeft, RotateCw } from 'lucide-vue-next';
 import { 
   getScanTasks, 
   getScanVulnerabilities, 
   deleteScanTask, 
-  addRepo, 
-  triggerScan,
-  getRepoList,
   getScanTaskLogs
 } from '../../api';
 
@@ -329,78 +253,6 @@ const activeVuln = ref<any | null>(null);
 const activeStepIndex = ref<number | null>(null);
 const activeStep = ref<DangerPoint | null>(null);
 const bottomTabKey = ref('taint');
-
-const parsedAiResult = computed(() => {
-  if (!activeVuln.value || !activeVuln.value.ai_result) return null;
-  let raw = activeVuln.value.ai_result;
-  if (typeof raw === 'object' && raw !== null) {
-    return raw;
-  }
-  if (typeof raw === 'string') {
-    let str = raw.trim();
-    if (str.startsWith('```json')) str = str.replace(/^```json/, '');
-    if (str.startsWith('```')) str = str.replace(/^```/, '');
-    if (str.endsWith('```')) str = str.replace(/```$/, '');
-    str = str.trim();
-
-    const firstBrace = str.indexOf('{');
-    const lastBrace = str.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      str = str.substring(firstBrace, lastBrace + 1);
-    }
-
-    try {
-      return JSON.parse(str);
-    } catch {
-      return {
-        vulnerability_analysis: raw
-      };
-    }
-  }
-  return null;
-});
-
-const getAiTagInfo = (item: any) => {
-  if (!item || (!item.ai_result && item.status !== 'ai_triaged' && item.status !== 'false_positive')) {
-    return null;
-  }
-
-  let isFalse = false;
-  if (item.status === 'false_positive') {
-    isFalse = true;
-  } else if (item.ai_result) {
-    let res = item.ai_result;
-    if (typeof res === 'string') {
-      try {
-        let str = res.trim();
-        if (str.startsWith('```json')) str = str.replace(/^```json/, '');
-        if (str.startsWith('```')) str = str.replace(/^```/, '');
-        if (str.endsWith('```')) str = str.replace(/```$/, '');
-        const firstBrace = str.indexOf('{');
-        const lastBrace = str.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace > firstBrace) {
-          str = str.substring(firstBrace, lastBrace + 1);
-        }
-        res = JSON.parse(str);
-      } catch {
-        res = null;
-      }
-    }
-    if (res && res.is_false_positive === true) {
-      isFalse = true;
-    }
-  }
-
-  return isFalse 
-    ? { color: 'orange', text: 'AI: 误报' } 
-    : { color: 'green', text: 'AI: 真实' };
-};
-
-const copyScript = (text: string) => {
-  if (!text) return;
-  navigator.clipboard.writeText(text);
-  message.success('已复制 WSL Docker 脚本到剪贴板');
-};
 
 // Log Viewer State (Direct One-time HTTP Fetch)
 const logModalVisible = ref(false);
@@ -436,23 +288,6 @@ const handleShowLogs = async (taskId: number) => {
 const handleLogModalClose = () => {
   logModalVisible.value = false;
 };
-
-// Forms & Filter
-const scanForm = reactive({
-  url: '',
-  branch: 'main',
-  language: 'go',
-  rules: {
-    cwe078: true,
-    cwe502: false,
-    cwe094: true,
-    cwe918: false,
-    cwe611: false,
-    cwe089: true,
-    cwe079: true,
-  },
-  enableAi: false,
-});
 
 const statusFilter = ref('');
 
@@ -527,56 +362,6 @@ const handleTaskTableChange = (pag: any) => {
   taskPagination.current = pag.current;
   taskPagination.pageSize = pag.pageSize;
   loadTasks();
-};
-
-const submitLoading = ref(false);
-
-const handleStartScan = async () => {
-  const url = scanForm.url.trim();
-  if (!url) {
-    message.error('Repository URL 不能为空');
-    return;
-  }
-
-  submitLoading.value = true;
-  try {
-    const reposRes = await getRepoList(1, 100);
-    const repos = reposRes.data.data.data || [];
-    let repo = repos.find((r: any) => r.url === url);
-
-    let repoId: number;
-    if (repo) {
-      repoId = repo.id;
-    } else {
-      const parts = url.split('/');
-      let name = parts[parts.length - 1].replace(/\.git$/i, '') || 'manual-repo';
-      
-      const createRes = await addRepo({
-        name: name,
-        url: url,
-        branch: scanForm.branch.trim() || 'main',
-        language: scanForm.language,
-        auth_type: 'none',
-      });
-      repoId = createRes.data.data.id;
-    }
-
-    await triggerScan({
-      repo_id: repoId,
-      branch: scanForm.branch.trim() || 'main',
-      language: scanForm.language,
-      rule_profile: 'baseline',
-    });
-
-    message.success('静态审计扫描任务已提交执行');
-    scanForm.url = '';
-    loadTasks();
-  } catch (err: any) {
-    const errMsg = err.response?.data?.error || '启动扫描任务失败';
-    message.error(errMsg);
-  } finally {
-    submitLoading.value = false;
-  }
 };
 
 const handleDeleteTask = async (id: number) => {
