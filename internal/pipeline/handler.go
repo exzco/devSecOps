@@ -7,16 +7,13 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 
 	"devsecops/internal/config"
-	dastModel "devsecops/internal/dast/model"
-	dastService "devsecops/internal/dast/service"
-	"devsecops/internal/sast/model"
-	"devsecops/internal/sast/queue"
-	sastService "devsecops/internal/sast/service"
-	scaModel "devsecops/internal/sca/model"
-	scaSvc "devsecops/internal/sca/service"
+	"devsecops/internal/dast"
+	"devsecops/internal/messaging"
+	"devsecops/internal/model"
+	"devsecops/internal/sast"
+	"devsecops/internal/sca"
 )
 
 const (
@@ -26,26 +23,26 @@ const (
 )
 
 type Handler struct {
-	sastService *sastService.ScanService
-	asynqClient *asynq.Client
-	dastService *dastService.DastService
-	scaService  *scaSvc.ScaService
-	scanConfig  *config.ScannerConfig
+	sastService  *sast.ScanService
+	streamClient *messaging.StreamClient
+	dastService  *dast.DastService
+	scaService   *sca.ScaService
+	scanConfig   *config.ScannerConfig
 }
 
 func NewHandler(
-	scanService *sastService.ScanService,
-	asynqClient *asynq.Client,
-	dast *dastService.DastService,
-	sca *scaSvc.ScaService,
+	scanService *sast.ScanService,
+	streamClient *messaging.StreamClient,
+	dastSvc *dast.DastService,
+	scaSvc *sca.ScaService,
 	scanConfig *config.ScannerConfig,
 ) *Handler {
 	return &Handler{
-		sastService: scanService,
-		asynqClient: asynqClient,
-		dastService: dast,
-		scaService:  sca,
-		scanConfig:  scanConfig,
+		sastService:  scanService,
+		streamClient: streamClient,
+		dastService:  dastSvc,
+		scaService:   scaSvc,
+		scanConfig:   scanConfig,
 	}
 }
 
@@ -111,16 +108,10 @@ func (h *Handler) submitSAST(c *gin.Context, req *SubmitRequest) {
 		return
 	}
 
-	asynqTask, err := queue.NewScanRepoTask(req.RepoID, task.ID, h.scanConfig.TimeoutMinutes)
-	if err != nil {
-		_ = h.sastService.UpdateTaskStatus(task.ID, model.TaskStatusFailed, map[string]interface{}{
-			"error_msg": "failed to build queue task: " + err.Error(),
-		})
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build queue task: " + err.Error()})
-		return
-	}
-
-	info, err := h.asynqClient.Enqueue(asynqTask)
+	queueID, err := h.streamClient.Publish(c.Request.Context(), messaging.StreamSASTTasks, messaging.SASTTaskMessage{
+		RepoID: req.RepoID,
+		TaskID: task.ID,
+	})
 	if err != nil {
 		_ = h.sastService.UpdateTaskStatus(task.ID, model.TaskStatusFailed, map[string]interface{}{
 			"error_msg": "failed to enqueue task: " + err.Error(),
@@ -136,7 +127,7 @@ func (h *Handler) submitSAST(c *gin.Context, req *SubmitRequest) {
 			"type":     ScanTypeSAST,
 			"status":   task.Status,
 			"task_id":  task.ID,
-			"queue_id": info.ID,
+			"queue_id": queueID,
 		},
 	})
 }
@@ -310,14 +301,14 @@ func isDASTTerminal(status string) bool {
 
 func isSCATerminal(status string) bool {
 	switch status {
-	case scaModel.TaskStatusSuccess, scaModel.TaskStatusFailed, scaModel.TaskStatusCanceled:
+	case model.TaskStatusSuccess, model.TaskStatusFailed, model.TaskStatusCanceled:
 		return true
 	default:
 		return false
 	}
 }
 
-func countDASTSeverities(findings []dastModel.Finding) map[string]int {
+func countDASTSeverities(findings []model.Finding) map[string]int {
 	counts := map[string]int{
 		"critical": 0,
 		"high":     0,

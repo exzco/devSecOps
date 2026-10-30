@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"devsecops/internal/dast/model"
+	"devsecops/internal/model"
 )
 
 type ScanOptions struct {

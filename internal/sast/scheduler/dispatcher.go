@@ -12,11 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hibiken/asynq"
-
 	"devsecops/internal/config"
-	"devsecops/internal/sast/contract"
-	"devsecops/internal/sast/queue"
+	"devsecops/internal/messaging"
+	"devsecops/internal/sast"
 	"devsecops/internal/sast/scanner"
 )
 
@@ -29,19 +27,8 @@ func NewTaskDispatcher(worker *scanner.ScanWorker, client *WorkerClient) *TaskDi
 	return &TaskDispatcher{worker: worker, client: client}
 }
 
-func (d *TaskDispatcher) ProcessTask(ctx context.Context, task *asynq.Task) error {
-	if task.Type() != queue.TypeScanRepo {
-		return fmt.Errorf("unknown task type: %s", task.Type())
-	}
-	return d.handleScanRepo(ctx, task)
-}
-
-func (d *TaskDispatcher) handleScanRepo(ctx context.Context, task *asynq.Task) error {
-	var payload queue.ScanRepoPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-		return fmt.Errorf("decode task payload: %w", err)
-	}
-
+// Dispatch 处理来自 Redis Streams 的扫描任务
+func (d *TaskDispatcher) Dispatch(ctx context.Context, payload messaging.SASTTaskMessage) error {
 	job, err := d.client.GetJob(ctx, payload.TaskID)
 	if err != nil {
 		return fmt.Errorf("fetch scan job %d: %w", payload.TaskID, err)
@@ -64,7 +51,7 @@ func (d *TaskDispatcher) handleScanRepo(ctx context.Context, task *asynq.Task) e
 	)
 	duration := time.Since(startedAt).Milliseconds()
 	if scanErr != nil {
-		failErr := d.client.Fail(ctx, job.TaskID, contract.Callback{
+		failErr := d.client.Fail(ctx, job.TaskID, sast.Callback{
 			Error:      scanErr.Error(),
 			DurationMs: duration,
 			CommitSHA:  job.CommitSHA,
@@ -80,7 +67,7 @@ func (d *TaskDispatcher) handleScanRepo(ctx context.Context, task *asynq.Task) e
 	if err != nil {
 		return fmt.Errorf("read SARIF result: %w", err)
 	}
-	if err := d.client.Complete(ctx, job.TaskID, contract.Callback{
+	if err := d.client.Complete(ctx, job.TaskID, sast.Callback{
 		SARIF:           sarifData,
 		Vulnerabilities: vulnerabilities,
 		DurationMs:      duration,
@@ -106,9 +93,9 @@ func NewWorkerClient(cfg *config.WorkerConfig) *WorkerClient {
 	}
 }
 
-func (c *WorkerClient) GetJob(ctx context.Context, taskID uint) (*contract.Job, error) {
+func (c *WorkerClient) GetJob(ctx context.Context, taskID uint) (*sast.Job, error) {
 	var response struct {
-		Data contract.Job `json:"data"`
+		Data sast.Job `json:"data"`
 	}
 	if err := c.do(ctx, http.MethodGet, fmt.Sprintf("/internal/v1/sast/tasks/%d/job", taskID), nil, &response); err != nil {
 		return nil, err
@@ -120,14 +107,14 @@ func (c *WorkerClient) AppendLog(ctx context.Context, taskID uint, message strin
 	if strings.TrimSpace(message) == "" {
 		return nil
 	}
-	return c.do(ctx, http.MethodPost, fmt.Sprintf("/internal/v1/sast/tasks/%d/logs", taskID), contract.Callback{Message: message}, nil)
+	return c.do(ctx, http.MethodPost, fmt.Sprintf("/internal/v1/sast/tasks/%d/logs", taskID), sast.Callback{Message: message}, nil)
 }
 
-func (c *WorkerClient) Complete(ctx context.Context, taskID uint, request contract.Callback) error {
+func (c *WorkerClient) Complete(ctx context.Context, taskID uint, request sast.Callback) error {
 	return c.do(ctx, http.MethodPost, fmt.Sprintf("/internal/v1/sast/tasks/%d/complete", taskID), request, nil)
 }
 
-func (c *WorkerClient) Fail(ctx context.Context, taskID uint, request contract.Callback) error {
+func (c *WorkerClient) Fail(ctx context.Context, taskID uint, request sast.Callback) error {
 	return c.do(ctx, http.MethodPost, fmt.Sprintf("/internal/v1/sast/tasks/%d/fail", taskID), request, nil)
 }
 

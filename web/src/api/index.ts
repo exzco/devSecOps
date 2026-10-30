@@ -130,4 +130,53 @@ export const getScaDependencies = (id: number) =>
 export const getScaVulnerabilities = (id: number) =>
   api.get(`/sca/tasks/${id}/vulnerabilities`);
 
+// ==================== 分布式算力节点与环境大盘 APIs ====================
+
+export interface DependencyStatus {
+  name: string;
+  required: boolean;
+  installed: boolean;
+  path: string;
+  version: string;
+  message: string;
+}
+
+export interface SystemInfo {
+  os: string;
+  arch: string;
+  num_cpu: number;
+  go_version: string;
+  work_dir: string;
+}
+
+export interface WorkerInfo {
+  id: string;
+  type: string;
+  hostname: string;
+  ip: string;
+  pid: number;
+  status: string;
+  ready: boolean;
+  started_at: string;
+  last_heartbeat: string;
+  active_tasks: number;
+  system_info: SystemInfo;
+  dependencies: DependencyStatus[];
+  missing_summary: string[];
+}
+
+export interface WorkersOverview {
+  total_workers: number;
+  online_workers: number;
+  sast_online: number;
+  dast_online: number;
+  all_ready: boolean;
+  has_missing_deps: boolean;
+  missing_dependencies: string[];
+  workers: WorkerInfo[];
+}
+
+export const getWorkersOverview = () =>
+  api.get<{ code: number; message: string; data: WorkersOverview }>('/workers');
+
 export default api;

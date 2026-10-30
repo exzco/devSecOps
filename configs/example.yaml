@@ -24,7 +24,7 @@ scanner:
   default_profile: baseline
   
 dast:
-  poc_dir: "./pocs"
+  poc_dir: "./data/pocs"
   default_ports: "top1000"
   queue_prefix: "scan"
 

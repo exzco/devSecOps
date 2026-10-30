@@ -12,14 +12,8 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"devsecops/internal/dast/engine"
-	"devsecops/internal/dast/messaging"
-	"devsecops/internal/dast/model"
-)
-
-const (
-	DefaultRawStream    = messaging.DefaultRawStream
-	DefaultTargetStream = messaging.DefaultTargetStream
-	DefaultGroup        = messaging.DefaultGroup
+	"devsecops/internal/messaging"
+	"devsecops/internal/model"
 )
 
 const finishTargetScript = `
@@ -166,13 +160,13 @@ type WorkerRuntime struct {
 
 func NewWorkerRuntime(rdb *redis.Client, prefix, rawStream, targetStream, group string, runner *engine.Runner) *WorkerRuntime {
 	if rawStream == "" {
-		rawStream = DefaultRawStream
+		rawStream = messaging.DefaultRawStream
 	}
 	if targetStream == "" {
-		targetStream = DefaultTargetStream
+		targetStream = messaging.DefaultTargetStream
 	}
 	if group == "" {
-		group = DefaultGroup
+		group = messaging.DefaultGroup
 	}
 	return &WorkerRuntime{
 		client:       messaging.NewStreamClient(rdb),
@@ -231,7 +225,7 @@ func (w *WorkerRuntime) runParserLoop(ctx context.Context) {
 				_ = w.client.Ack(ctx, w.rawStream, w.group, msg.ID)
 				continue
 			}
-			var rawTask messaging.WorkItem
+			var rawTask model.WorkItem
 			if err := json.Unmarshal([]byte(rawJSON), &rawTask); err != nil {
 				_ = w.client.Ack(ctx, w.rawStream, w.group, msg.ID)
 				continue
@@ -258,7 +252,7 @@ func (w *WorkerRuntime) runParserLoop(ctx context.Context) {
 			)
 
 			for _, target := range expandedTargets {
-				stageInput := messaging.WorkItem{
+				stageInput := model.WorkItem{
 					ScanRunID:   rawTask.ScanRunID,
 					StageRunID:  model.NewUUID(),
 					StageName:   "full_scan",
@@ -297,7 +291,7 @@ func (w *WorkerRuntime) runScanLoop(ctx context.Context) {
 				_ = w.client.Ack(ctx, w.targetStream, w.group, msg.ID)
 				continue
 			}
-			var input messaging.WorkItem
+			var input model.WorkItem
 			if err := json.Unmarshal([]byte(rawJSON), &input); err != nil {
 				_ = w.client.Ack(ctx, w.targetStream, w.group, msg.ID)
 				continue

@@ -13,7 +13,7 @@ import (
 
 	"github.com/chainreactors/fingers"
 
-	"devsecops/internal/dast/model"
+	"devsecops/internal/model"
 )
 
 var (

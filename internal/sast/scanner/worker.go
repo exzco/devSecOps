@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"devsecops/internal/config"
-	"devsecops/internal/sast/contract"
+	"devsecops/internal/sast"
 )
 
 type ScanWorker struct {
@@ -27,7 +27,7 @@ func NewScanWorker(cfg *config.ScannerConfig) *ScanWorker {
 	}
 }
 
-func (w *ScanWorker) RunScan(ctx context.Context, job *contract.Job, progress ScanProgressLogger) ([]ParsedVulnerability, string, error) {
+func (w *ScanWorker) RunScan(ctx context.Context, job *sast.Job, progress ScanProgressLogger) ([]sast.Vulnerability, string, error) {
 	if progress == nil {
 		progress = func(string) {}
 	}
@@ -78,7 +78,7 @@ func (w *ScanWorker) RunScan(ctx context.Context, job *contract.Job, progress Sc
 
 	// 4. 解析 SARIF
 	progress("开始解析 SARIF 结果")
-	vulns, err := ParseSARIF(sarifFile)
+	vulns, err := sast.ParseSARIF(sarifFile)
 	if err != nil {
 		progress("SARIF 解析失败: " + err.Error())
 		return nil, "", err

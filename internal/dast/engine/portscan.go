@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"devsecops/internal/dast/model"
+	"devsecops/internal/model"
 )
 
 var CommonTop100Ports = []int{

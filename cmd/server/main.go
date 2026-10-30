@@ -13,20 +13,17 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 
+	"devsecops/internal"
 	"devsecops/internal/config"
-	dastHandler "devsecops/internal/dast/handler"
-	dastService "devsecops/internal/dast/service"
+	"devsecops/internal/dast"
+	"devsecops/internal/messaging"
 	"devsecops/internal/model"
 	"devsecops/internal/pipeline"
-	"devsecops/internal/router"
-	sastHandler "devsecops/internal/sast/handler"
-	sastModel "devsecops/internal/sast/model"
-	sastQueue "devsecops/internal/sast/queue"
-	sastService "devsecops/internal/sast/service"
-	scaHandler "devsecops/internal/sca/handler"
-	scaModel "devsecops/internal/sca/model"
-	scaService "devsecops/internal/sca/service"
+	"devsecops/internal/sast"
+	"devsecops/internal/sca"
+	"devsecops/internal/worker"
 )
 
 func main() {
@@ -52,35 +49,40 @@ func main() {
 	log.Println("[Server-Init] Database connected and migrated")
 
 	if err := db.AutoMigrate(
-		&sastModel.Repository{},
-		&sastModel.ScanTask{},
-		&sastModel.Vulnerability{},
-		&scaModel.ScaScanTask{},
-		&scaModel.ScaDependency{},
-		&scaModel.ScaVulnerability{},
+		&model.Repository{},
+		&model.ScanTask{},
+		&model.Vulnerability{},
+		&model.ScaScanTask{},
+		&model.ScaDependency{},
+		&model.ScaVulnerability{},
 	); err != nil {
 		panic("failed to migrate domain models: " + err.Error())
 	}
 
-	sastRepoSvc := sastService.NewRepoService(db)
-	sastScanSvc := sastService.NewScanService(db)
-	scaSvc := scaService.NewScaService(db, &cfg.Scanner)
+	sastRepoSvc := sast.NewRepoService(db)
+	sastScanSvc := sast.NewScanService(db)
+	scaSvc := sca.NewScaService(db, &cfg.Scanner)
 
-	asynqClient := sastQueue.NewClient(&cfg.Redis)
-	defer asynqClient.Close()
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	defer rdb.Close()
 
-	dastSvc := dastService.NewDastService(&cfg.Redis, cfg.Dast)
-	defer dastSvc.Close()
+	streamClient := messaging.NewStreamClient(rdb)
+	dastSvc := dast.NewDastService(rdb, cfg.Dast)
 
-	handlers := &router.Handlers{
-		RepoHandler:     sastHandler.NewRepoHandler(sastRepoSvc),
-		ScanHandler:     sastHandler.NewScanHandler(sastScanSvc),
-		DastCtrlHandler: dastHandler.NewDastHandler(dastSvc),
-		ScaHandler:      scaHandler.NewScaHandler(scaSvc),
-		PipelineHandler: pipeline.NewHandler(sastScanSvc, asynqClient, dastSvc, scaSvc, &cfg.Scanner),
-		InternalHandler: sastHandler.NewInternalHandler(sastScanSvc, cfg.Worker.Token, cfg.Scanner.WorkDir),
+	handlers := &internal.Handlers{
+		RepoHandler:     sast.NewRepoHandler(sastRepoSvc),
+		ScanHandler:     sast.NewScanHandler(sastScanSvc),
+		DastCtrlHandler: dast.NewDastHandler(dastSvc),
+		ScaHandler:      sca.NewScaHandler(scaSvc),
+		PipelineHandler: pipeline.NewHandler(sastScanSvc, streamClient, dastSvc, scaSvc, &cfg.Scanner),
+		InternalHandler: sast.NewInternalHandler(sastScanSvc, cfg.Worker.Token, cfg.Scanner.WorkDir),
+		WorkerHandler:   worker.NewWorkerHandler(rdb),
 	}
-	r := router.SetupRouter(handlers)
+	r := internal.SetupRouter(handlers)
 
 	srv := &http.Server{
 		Handler: r,
@@ -103,7 +105,7 @@ func main() {
 	if ln6 != nil {
 		go func() {
 			if err := srv.Serve(ln6); err != nil && err != http.ErrServerClosed {
-				log.Printf("[Server] tcp6 server stopped: %v", err)
+				log.Printf("[Server] Note: tcp6 server stopped: %v", err)
 			}
 		}()
 	}
@@ -112,11 +114,14 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("[Server] Shutting down DevSecOps Central Platform...")
+	log.Println("[Server] Shutting down server...")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("[Server] Shutdown error: %v", err)
+		log.Printf("[Server] Server forced to shutdown: %v", err)
 	}
-	log.Println("[Server] Server stopped successfully")
+
+	log.Println("[Server] Server exiting")
 }

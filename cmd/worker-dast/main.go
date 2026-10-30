@@ -13,8 +13,9 @@ import (
 
 	"devsecops/internal/config"
 	dastEngine "devsecops/internal/dast/engine"
-	dastMessaging "devsecops/internal/dast/messaging"
 	dastScheduler "devsecops/internal/dast/scheduler"
+	"devsecops/internal/messaging"
+	"devsecops/internal/worker"
 )
 
 func main() {
@@ -29,11 +30,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	indexPath := filepath.Join(cfg.Dast.PocDir, "poc_index.json")
-	if _, err := os.Stat(indexPath); err != nil {
-		log.Fatalf("PoC index not found at %s: %v", indexPath, err)
-	}
-
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.Redis.Addr,
 		Password: cfg.Redis.Password,
@@ -41,13 +37,33 @@ func main() {
 	})
 	defer rdb.Close()
 
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Fatalf("[worker-dast] 无法连接 Redis 服务 (%s): %v", cfg.Redis.Addr, err)
+	}
+
+	// 心跳与环境自检上报
+	reporter := worker.NewHeartbeatReporter(
+		rdb,
+		worker.TypeDAST,
+		cfg.Dast.PocDir,
+		func() ([]worker.DependencyStatus, []string) {
+			return worker.DiagnoseDAST(&cfg.Dast)
+		},
+	)
+	reporter.Start(ctx)
+
+	indexPath := filepath.Join(cfg.Dast.PocDir, "poc_index.json")
+	if _, err := os.Stat(indexPath); err != nil {
+		log.Printf("[worker-dast] [!] 警告: PoC 规则索引文件未找到 (%s): %v, 看板将标记环境不就绪", indexPath, err)
+	}
+
 	dastRunner := dastEngine.NewRunner(cfg.Dast.PocDir)
 	dastWorker := dastScheduler.NewWorkerRuntime(
 		rdb,
 		cfg.Dast.QueuePrefix,
-		dastMessaging.DefaultRawStream,
-		dastMessaging.DefaultTargetStream,
-		dastMessaging.DefaultGroup,
+		messaging.DefaultRawStream,
+		messaging.DefaultTargetStream,
+		messaging.DefaultGroup,
 		dastRunner,
 	)
 
@@ -57,7 +73,7 @@ func main() {
 		}
 	}()
 
-	log.Println("[worker-dast] ready")
+	log.Printf("[worker-dast] 节点已上线并就绪: WorkerID=%s", reporter.WorkerID())
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

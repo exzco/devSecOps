@@ -105,7 +105,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Scanner.TimeoutMinutes = 30
 	}
 	if cfg.Dast.PocDir == "" {
-		cfg.Dast.PocDir = "./pocs"
+		cfg.Dast.PocDir = "./data/pocs"
 	}
 	if cfg.Dast.DefaultPorts == "" {
 		cfg.Dast.DefaultPorts = "top1000"

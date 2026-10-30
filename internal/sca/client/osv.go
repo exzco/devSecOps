@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"devsecops/internal/sca/model"
+	"devsecops/internal/model"
 	"devsecops/internal/sca/parser"
 )
 

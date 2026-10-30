@@ -1,0 +1,16 @@
+[Unit]
+Description=DevSecOps DAST Dynamic Worker
+After=network.target docker.service devsecops-server.service
+Wants=devsecops-server.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/devsecops
+ExecStart=/opt/devsecops/devsecops-worker-dast --config /opt/devsecops/configs/config.yaml
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

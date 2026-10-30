@@ -3,14 +3,14 @@ package pipeline
 import (
 	"testing"
 
-	dastModel "devsecops/internal/dast/model"
+	"devsecops/internal/model"
 )
 
 func TestCountDASTSeverities(t *testing.T) {
-	counts := countDASTSeverities([]dastModel.Finding{
-		{Severity: dastModel.SeverityHigh},
-		{Severity: dastModel.SeverityHigh},
-		{Severity: dastModel.SeverityMedium},
+	counts := countDASTSeverities([]model.Finding{
+		{BaseVulnerability: model.BaseVulnerability{Severity: model.SeverityHigh}},
+		{BaseVulnerability: model.BaseVulnerability{Severity: model.SeverityHigh}},
+		{BaseVulnerability: model.BaseVulnerability{Severity: model.SeverityMedium}},
 	})
 	if counts["high"] != 2 || counts["medium"] != 1 {
 		t.Fatalf("unexpected counts: %#v", counts)

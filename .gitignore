@@ -9,3 +9,4 @@
 /devsecops-server
 /devsecops-worker-sast
 /devsecops-worker-dast
+*_test.go

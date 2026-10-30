@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/redis/go-redis/v9"
+
 	"devsecops/internal/config"
 	sastScheduler "devsecops/internal/sast/scheduler"
+	"devsecops/internal/worker"
 )
 
 func main() {
@@ -20,14 +24,40 @@ func main() {
 		log.Fatalf("failed to load worker config: %v", err)
 	}
 
-	asynqServer, err := sastScheduler.StartWorker(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	defer rdb.Close()
+
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Fatalf("[worker-sast] 无法连接 Redis 服务 (%s): %v", cfg.Redis.Addr, err)
+	}
+
+	// 初始化心跳与环境自检上报器
+	reporter := worker.NewHeartbeatReporter(
+		rdb,
+		worker.TypeSAST,
+		cfg.Scanner.WorkDir,
+		func() ([]worker.DependencyStatus, []string) {
+			return worker.DiagnoseSAST(&cfg.Scanner)
+		},
+	)
+	reporter.Start(ctx)
+
+	// 启动 SAST 任务流监听调度器
+	_, err = sastScheduler.StartWorker(ctx, cfg, rdb, reporter)
 	if err != nil {
 		log.Fatalf("failed to start SAST worker: %v", err)
 	}
-	defer asynqServer.Shutdown()
 
-	log.Println("[worker-sast] ready")
+	log.Printf("[worker-sast] 节点已上线并就绪: WorkerID=%s", reporter.WorkerID())
 	waitForShutdown()
+	cancel()
 	log.Println("[worker-sast] shutdown complete")
 }
 

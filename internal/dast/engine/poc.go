@@ -12,7 +12,7 @@ import (
 	"github.com/chainreactors/neutron/protocols"
 	"github.com/chainreactors/neutron/templates"
 
-	"devsecops/internal/dast/model"
+	"devsecops/internal/model"
 )
 
 const DefaultPOCIndexFile = "poc_index.json"
@@ -24,7 +24,7 @@ type RuleIndex struct {
 
 func NewRuleIndex(pocDir, indexFile string) *RuleIndex {
 	if pocDir == "" {
-		pocDir = "./pocs"
+		pocDir = "./data/pocs"
 	}
 	if indexFile == "" {
 		indexFile = DefaultPOCIndexFile
@@ -137,14 +137,16 @@ func ExecuteChecks(ctx context.Context, specs []model.CheckSpec, scanRunID, targ
 		res, err := tmpl.Execute(targetURL, nil)
 		if err == nil && res != nil && res.Matched {
 			finding := model.Finding{
-				ID:          model.NewUUID(),
-				ScanRunID:   scanRunID,
-				StableKey:   model.GenerateStableFindingKey(targetURL, targetURL, spec.ID, "", ""),
-				Title:       spec.Name,
-				Description: fmt.Sprintf("Neutron POC %s matched on %s", spec.ID, targetURL),
-				Severity:    spec.Severity,
-				CheckID:     spec.ID,
-				MatchedAt:   targetURL,
+				BaseVulnerability: model.BaseVulnerability{
+					Title:       spec.Name,
+					Description: fmt.Sprintf("Neutron POC %s matched on %s", spec.ID, targetURL),
+					Severity:    spec.Severity,
+				},
+				ID:        model.NewUUID(),
+				ScanRunID: scanRunID,
+				StableKey: model.GenerateStableFindingKey(targetURL, targetURL, spec.ID, "", ""),
+				CheckID:   spec.ID,
+				MatchedAt: targetURL,
 			}
 			findings = append(findings, finding)
 		}
