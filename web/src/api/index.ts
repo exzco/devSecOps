@@ -33,8 +33,8 @@ export interface TriggerScanPayload {
 export const triggerScan = (payload: TriggerScanPayload) =>
   api.post('/scans', { ...payload, type: 'sast' });
 
-export const deleteScanTask = (taskId: number) =>
-  api.delete(`/scan/tasks/${taskId}`);
+export const deleteScanTask = (taskId: number, force: boolean = false) =>
+  api.delete(`/scan/tasks/${taskId}${force ? '?force=true' : ''}`);
 
 export const getScanTasks = (page = 1, perPage = 20, repoId?: number, status?: string) => {
   const params = new URLSearchParams({
@@ -48,8 +48,24 @@ export const getScanTasks = (page = 1, perPage = 20, repoId?: number, status?: s
   return api.get(`/scan/tasks?${params.toString()}`);
 };
 
-export const getScanVulnerabilities = (taskId: number, page = 1, perPage = 20) =>
-  api.get(`/scan/vulnerabilities?task_id=${taskId}&page=${page}&per_page=${perPage}`);
+export const getScanVulnerabilities = (
+  taskId: number, 
+  page = 1, 
+  perPage = 20, 
+  severity?: string, 
+  ruleId?: string, 
+  keyword?: string
+) => {
+  const params = new URLSearchParams({
+    task_id: String(taskId),
+    page: String(page),
+    per_page: String(perPage),
+  });
+  if (severity) params.append('severity', severity);
+  if (ruleId) params.append('rule_id', ruleId);
+  if (keyword) params.append('keyword', keyword);
+  return api.get(`/scan/vulnerabilities?${params.toString()}`);
+};
 
 export const getScanTaskLogs = (taskId: number) =>
   api.get(`/scan/tasks/${taskId}/logs`);

@@ -24,18 +24,18 @@
     <div class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4 overflow-hidden">
       <!-- Left Column: Repository & Target Selection (1 col, fixed layout) -->
       <div class="h-full flex flex-col overflow-hidden">
-        <a-card title="1. 扫描目标与规则套件" :bordered="false" class="rounded-lg shadow-sm border border-zinc-200 bg-white h-full flex flex-col">
+        <a-card title="扫描目标配置" :bordered="false" class="rounded-lg shadow-sm border border-zinc-200 bg-white h-full flex flex-col">
           <a-form layout="vertical" class="space-y-4">
-            <a-form-item label="代码来源模式" required>
-              <a-radio-group v-model:value="repoMode" button-style="solid" class="w-full flex">
-                <a-radio-button value="select" class="flex-1 text-center">选择已有仓库</a-radio-button>
-                <a-radio-button value="quick" class="flex-1 text-center">快捷导入仓库</a-radio-button>
+            <a-form-item label="代码来源模式" class="!mb-3">
+              <a-radio-group v-model:value="repoMode" button-style="solid" size="small" class="w-full flex">
+                <a-radio-button value="select" class="flex-1 text-center">已有仓库</a-radio-button>
+                <a-radio-button value="quick" class="flex-1 text-center">快捷导入</a-radio-button>
               </a-radio-group>
             </a-form-item>
 
             <!-- Mode 1: Select registered repo -->
             <template v-if="repoMode === 'select'">
-              <a-form-item label="目标代码仓库" required>
+              <a-form-item label="目标代码仓库" required class="!mb-3">
                 <a-select
                   v-model:value="selectedRepoId"
                   placeholder="请选择已注册的代码仓库"
@@ -46,38 +46,32 @@
                     {{ r.name }} ({{ r.language || '未知语言' }})
                   </a-select-option>
                 </a-select>
-              </a-form-item>
 
-              <div v-if="currentRepo" class="p-3 bg-zinc-50 border border-zinc-200 rounded-lg text-xs space-y-1.5 text-zinc-600">
-                <div class="flex justify-between">
-                  <span class="text-zinc-400">Git 地址:</span>
-                  <span class="font-mono truncate max-w-[200px]" :title="currentRepo.url">{{ currentRepo.url }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-zinc-400">默认语言:</span>
-                  <a-tag :color="getLangColor(currentRepo.language)" class="text-xs uppercase m-0">
+                <!-- Compact repo info summary -->
+                <div v-if="currentRepo" class="mt-2 px-2.5 py-1.5 bg-zinc-50 border border-zinc-200/80 rounded-md text-xs text-zinc-600 flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5 truncate">
+                    <GitBranch :size="12" class="text-zinc-400 shrink-0" />
+                    <span class="font-mono text-[11px] text-zinc-600 truncate" :title="currentRepo.url">{{ currentRepo.url }}</span>
+                  </div>
+                  <a-tag :color="getLangColor(currentRepo.language)" class="text-[10px] uppercase font-mono m-0 shrink-0">
                     {{ currentRepo.language }}
                   </a-tag>
                 </div>
-                <div class="flex justify-between">
-                  <span class="text-zinc-400">默认分支:</span>
-                  <span class="font-mono">{{ currentRepo.branch || 'main' }}</span>
-                </div>
-              </div>
+              </a-form-item>
             </template>
 
             <!-- Mode 2: Quick import repo -->
             <template v-else>
-              <a-form-item label="仓库名称" required>
-                <a-input v-model:value="quickForm.name" placeholder="例如: web-backend" />
+              <a-form-item label="仓库名称" required class="!mb-3">
+                <a-input v-model:value="quickForm.name" placeholder="例如: web-backend" size="small" />
               </a-form-item>
 
-              <a-form-item label="Git 仓库 URL" required>
-                <a-input v-model:value="quickForm.url" placeholder="https://github.com/owner/repo.git" />
+              <a-form-item label="Git 仓库 URL" required class="!mb-3">
+                <a-input v-model:value="quickForm.url" placeholder="https://github.com/owner/repo.git" size="small" />
               </a-form-item>
 
-              <a-form-item label="开发语言" required>
-                <a-select v-model:value="quickForm.language" placeholder="请选择编程语言">
+              <a-form-item label="开发语言" required class="!mb-3">
+                <a-select v-model:value="quickForm.language" placeholder="请选择编程语言" size="small">
                   <a-select-option value="go">Go</a-select-option>
                   <a-select-option value="java">Java</a-select-option>
                   <a-select-option value="javascript">JavaScript / TypeScript</a-select-option>
@@ -86,29 +80,30 @@
               </a-form-item>
             </template>
 
-            <a-form-item label="扫描分支 (Branch)">
-              <a-input v-model:value="form.branch" placeholder="main" />
+            <a-form-item label="扫描分支 (Branch)" class="!mb-3">
+              <a-input v-model:value="form.branch" placeholder="main" size="small" />
             </a-form-item>
 
             <!-- 扫描规则套件选择 -->
-            <a-form-item label="扫描规则套件 (Rule Suite)">
+            <a-form-item label="扫描规则套件 (Rule Suite)" class="!mb-0">
               <a-select v-model:value="selectedSuiteId" @change="handleSuiteChange">
                 <a-select-opt-group label="内置预设套件">
                   <a-select-option v-for="s in defaultSuites" :key="s.id" :value="s.id">
-                    <span class="font-semibold">{{ s.name }}</span> ({{ s.ruleIds.length }} 项规则)
+                    <span class="font-medium">{{ s.name }}</span> ({{ s.ruleIds.length }} 项)
                   </a-select-option>
                 </a-select-opt-group>
                 <a-select-opt-group v-if="customSuites.length > 0" label="我合并保存的套件">
                   <a-select-option v-for="s in customSuites" :key="s.id" :value="s.id">
-                    <span class="font-semibold">{{ s.name }}</span> ({{ s.ruleIds.length }} 项规则)
+                    <span class="font-medium">{{ s.name }}</span> ({{ s.ruleIds.length }} 项)
                   </a-select-option>
                 </a-select-opt-group>
                 <a-select-option v-if="isCustomSelection" value="_custom_" disabled>
                   <span class="italic text-zinc-500">当前：自定义勾选组合 (未保存)</span>
                 </a-select-option>
               </a-select>
-              <div v-if="activeSuiteDescription" class="mt-2 text-xs text-zinc-500 leading-relaxed bg-zinc-50 p-2.5 rounded border border-zinc-200/80">
-                {{ activeSuiteDescription }}
+              <div v-if="activeSuiteDescription" class="mt-2 text-xs text-zinc-500 leading-normal flex items-start gap-1.5 px-0.5">
+                <Info :size="12" class="text-zinc-400 mt-0.5 shrink-0" />
+                <span>{{ activeSuiteDescription }}</span>
               </div>
             </a-form-item>
           </a-form>
@@ -119,64 +114,74 @@
       <div class="lg:col-span-2 h-full flex flex-col overflow-hidden">
         <a-card :bordered="false" class="rounded-lg shadow-sm border border-zinc-200 bg-white h-full flex flex-col overflow-hidden" :bodyStyle="{ flex: '1', display: 'flex', flexDirection: 'column', minHeight: 0, padding: '16px' }">
           <template #title>
-            <div class="flex items-center gap-2">
-              <span>2. 扫描规则选择矩阵</span>
-              <span class="text-xs font-normal text-zinc-400">（支持自由勾选或合并为套件）</span>
+            <div class="flex items-center gap-2.5">
+              <span class="font-semibold text-sm text-zinc-900">安全规则矩阵</span>
+              <a-tag :bordered="false" class="bg-zinc-100 text-zinc-600 text-[11px] font-mono font-medium m-0">
+                已选 {{ selectedRulesCount }} / {{ allRules.length }}
+              </a-tag>
             </div>
           </template>
           <template #extra>
             <div class="flex items-center gap-2">
-              <a-button size="small" type="dashed" @click="showSaveSuiteModal = true" :disabled="selectedRulesCount === 0">
-                <template #icon><Save :size="14" class="inline-block" /></template>
-                合并为新套件
+              <a-space :size="4">
+                <a-button size="small" type="text" class="text-xs text-zinc-600 hover:text-zinc-900 !px-2" @click="handleSelectAll">全选</a-button>
+                <span class="text-zinc-300">|</span>
+                <a-button size="small" type="text" class="text-xs text-zinc-600 hover:text-zinc-900 !px-2" @click="handleClearAll">清空</a-button>
+              </a-space>
+              <div class="h-3 w-px bg-zinc-200 mx-1"></div>
+              <a-button size="small" @click="showSaveSuiteModal = true" :disabled="selectedRulesCount === 0" class="text-xs">
+                <template #icon><Save :size="12" class="inline-block" /></template>
+                保存为套件
               </a-button>
-              <a-button size="small" type="dashed" @click="handleOpenCreateRule">
-                <template #icon><Plus :size="14" class="inline-block" /></template>
-                新建
+              <a-button size="small" type="primary" class="bg-zinc-900 text-xs" @click="handleOpenCreateRule">
+                <template #icon><Plus :size="12" class="inline-block" /></template>
+                新建规则
               </a-button>
-              <a-button size="small" @click="handleSelectAll">全选</a-button>
-              <a-button size="small" @click="handleClearAll">清空</a-button>
             </div>
           </template>
 
           <!-- Scrollable Rule Items Grid -->
-          <div class="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               <div
                 v-for="rule in allRules"
                 :key="rule.id"
-                class="flex items-start gap-3 p-3.5 rounded-lg border transition-all cursor-pointer select-none"
-                :class="selectedRules[rule.id] ? 'border-zinc-900 bg-zinc-50/80 shadow-xs' : 'border-zinc-200 hover:border-zinc-300 bg-white'"
+                class="group relative flex items-start gap-2.5 p-3 rounded-lg border transition-all cursor-pointer select-none"
+                :class="selectedRules[rule.id] ? 'border-zinc-900 bg-zinc-50/70 shadow-xs' : 'border-zinc-200 hover:border-zinc-300 bg-white'"
                 @click="toggleRule(rule.id)"
               >
                 <a-checkbox
                   :checked="selectedRules[rule.id]"
-                  class="mt-0.5"
+                  class="mt-0.5 shrink-0"
                   @click.stop="toggleRule(rule.id)"
                 />
                 <div class="flex-1 min-w-0">
-                  <div class="flex items-center justify-between gap-2">
-                    <div class="flex items-center gap-2">
-                      <span class="font-mono font-bold text-xs text-zinc-900">{{ rule.tag }}</span>
-                      <a-tag :color="getSeverityColor(rule.severity)" class="text-[10px] font-semibold px-1 py-0">
+                  <div class="flex items-center justify-between gap-1.5">
+                    <div class="flex items-center gap-1.5 truncate">
+                      <span class="font-mono font-bold text-xs text-zinc-900 shrink-0">{{ rule.tag }}</span>
+                      <a-tag :color="getSeverityColor(rule.severity)" class="text-[9px] font-semibold px-1 py-0 m-0 shrink-0">
                         {{ rule.severity }}
                       </a-tag>
-                      <a-tag v-if="rule.isCustom" color="purple" class="text-[9px] px-1 py-0">
+                      <a-tag v-if="rule.isCustom" color="purple" class="text-[9px] px-1 py-0 m-0 shrink-0">
                         自定义
                       </a-tag>
                     </div>
-                    <a-button
-                      type="link"
-                      size="small"
-                      class="!p-0 !h-auto text-zinc-400 hover:text-zinc-900 text-[11px] flex items-center gap-1 font-normal"
+                    <!-- Hover-revealed edit button, keeping cards sleek and uncluttered -->
+                    <button
+                      type="button"
+                      class="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-zinc-900 p-0.5 rounded transition-all shrink-0 hover:bg-zinc-100"
+                      title="编辑规则配置"
                       @click.stop="handleOpenEditRule(rule)"
                     >
-                      <Pencil :size="11" class="inline-block" />
-                      <span>编辑配置</span>
-                    </a-button>
+                      <Pencil :size="11" />
+                    </button>
                   </div>
-                  <div class="text-xs font-semibold text-zinc-800 mt-1">{{ rule.name }}</div>
-                  <div class="text-[11px] text-zinc-500 mt-1 leading-relaxed">{{ rule.desc }}</div>
+                  <div class="text-xs font-medium text-zinc-800 mt-1 truncate" :title="rule.name">
+                    {{ rule.name }}
+                  </div>
+                  <div class="text-[11px] text-zinc-400 mt-0.5 truncate" :title="rule.desc">
+                    {{ rule.desc }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -325,7 +330,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { RotateCw, Play, Save, Plus, Pencil } from 'lucide-vue-next'
+import { RotateCw, Play, Save, Plus, Pencil, GitBranch, Info } from 'lucide-vue-next'
 import {
   getRepoList,
   addRepo,

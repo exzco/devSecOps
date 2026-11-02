@@ -48,7 +48,7 @@ func NewWorkerRuntime(
 
 	dispatcher := NewTaskDispatcher(
 		scanner.NewScanWorker(&cfg.Scanner),
-		NewWorkerClient(&cfg.Worker),
+		NewWorkerClient(&cfg.Worker, consumerID),
 	)
 
 	return &WorkerRuntime{

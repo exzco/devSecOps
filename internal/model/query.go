@@ -13,13 +13,20 @@ type PaginatedResponse struct {
 	TotalPages int         `json:"total_pages"`
 }
 
+const (
+	DefaultPerPage = 20
+	MaxPerPage     = 500
+)
+
 // NormalizePagination 规范化分页入参
 func NormalizePagination(page, perPage int) (int, int) {
 	if page < 1 {
 		page = 1
 	}
-	if perPage < 1 || perPage > 100 {
-		perPage = 20
+	if perPage < 1 {
+		perPage = DefaultPerPage
+	} else if perPage > MaxPerPage {
+		perPage = MaxPerPage
 	}
 	return page, perPage
 }
@@ -45,6 +52,7 @@ type ListQuery struct {
 	Status   string `form:"status"`
 	Severity string `form:"severity"`
 	RuleID   string `form:"rule_id"`
+	Keyword  string `form:"keyword"`
 	Page     int    `form:"page,default=1"`
 	PerPage  int    `form:"per_page,default=20"`
 }

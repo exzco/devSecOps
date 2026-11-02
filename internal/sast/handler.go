@@ -18,9 +18,7 @@ import (
 	"devsecops/internal/model"
 )
 
-// ==========================================
 // 1. 代码仓库 CRUD 分发器 (RepoHandler)
-// ==========================================
 
 type RepoHandler struct {
 	repoSvc *RepoService
@@ -116,9 +114,7 @@ func (h *RepoHandler) BatchDeleteRepos(c *gin.Context) {
 	})
 }
 
-// ==========================================
 // 2. 扫描任务与漏洞查询分发器 (ScanHandler)
-// ==========================================
 
 type ScanHandler struct {
 	scanSvc *ScanService
@@ -166,7 +162,9 @@ func (h *ScanHandler) DeleteTask(c *gin.Context) {
 		return
 	}
 
-	if err := h.scanSvc.DeleteTask(taskID); err != nil {
+	force := c.Query("force") == "true" || c.Query("force") == "1"
+
+	if err := h.scanSvc.DeleteTask(taskID, force); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "failed to delete task: " + err.Error()})
 		return
 	}
@@ -390,9 +388,7 @@ func (h *ScanHandler) StreamTaskLogs(c *gin.Context) {
 	})
 }
 
-// ==========================================
 // 3. Worker 内部通信分发器 (InternalHandler)
-// ==========================================
 
 type InternalHandler struct {
 	scanSvc     *ScanService
@@ -431,10 +427,20 @@ func (h *InternalHandler) GetJob(c *gin.Context) {
 		return
 	}
 
+	workerID := c.Query("worker_id")
+	if workerID == "" {
+		workerID = c.GetHeader("X-Worker-ID")
+	}
+
+	updates := map[string]interface{}{}
 	if task.Status == model.TaskStatusPending {
-		if err := h.scanSvc.UpdateTaskStatus(taskID, model.TaskStatusRunning, map[string]interface{}{
-			"started_at": time.Now(),
-		}); err != nil {
+		updates["started_at"] = time.Now()
+	}
+	if workerID != "" {
+		updates["worker_id"] = workerID
+	}
+	if len(updates) > 0 {
+		if err := h.scanSvc.UpdateTaskStatus(taskID, model.TaskStatusRunning, updates); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start task"})
 			return
 		}
@@ -468,6 +474,12 @@ func (h *InternalHandler) AppendLog(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "message is required"})
 		return
 	}
+
+	workerID := c.GetHeader("X-Worker-ID")
+	if workerID != "" {
+		_ = h.scanSvc.UpdateTask(taskID, map[string]interface{}{"worker_id": workerID})
+	}
+
 	if err := h.scanSvc.AppendTaskLog(taskID, req.Message); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to append task log"})
 		return
@@ -476,7 +488,7 @@ func (h *InternalHandler) AppendLog(c *gin.Context) {
 }
 
 func (h *InternalHandler) Complete(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<20)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 256<<20)
 	taskID, ok := parseTaskIDParam(c)
 	if !ok {
 		return
@@ -574,9 +586,7 @@ func (h *InternalHandler) Fail(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// ==========================================
-// 辅助函数
-// ==========================================
+// 4. 辅助函数
 
 func parseRepoID(c *gin.Context) (uint, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)

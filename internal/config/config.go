@@ -62,6 +62,8 @@ type ScannerConfig struct {
 	TimeoutMinutes int                           `mapstructure:"timeout_minutes"`
 	DefaultProfile string                        `mapstructure:"default_profile"`
 	RuleProfiles   map[string]ScannerRuleProfile `mapstructure:"rule_profiles"`
+	RamMB          int                           `mapstructure:"ram_mb"`
+	Threads        int                           `mapstructure:"threads"`
 }
 
 type ScannerRuleProfile struct {

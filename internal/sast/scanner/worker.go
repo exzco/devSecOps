@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"devsecops/internal/config"
 	"devsecops/internal/sast"
@@ -59,7 +60,9 @@ func (w *ScanWorker) RunScan(ctx context.Context, job *sast.Job, progress ScanPr
 	// 2. 创建数据库
 	log.Printf("[Task %d] 正在创建 CodeQL 数据库...", job.TaskID)
 	progress("开始创建 CodeQL 数据库")
+	stopDbHeartbeat := startHeartbeat(ctx, 20*time.Second, progress, "CodeQL 数据库构建中")
 	dbDir, err := w.codeql.CreateDatabase(ctx, taskID, srcDir, job.Language, "")
+	stopDbHeartbeat()
 	if err != nil {
 		progress("创建 CodeQL 数据库失败: " + err.Error())
 		return nil, "", err
@@ -69,7 +72,9 @@ func (w *ScanWorker) RunScan(ctx context.Context, job *sast.Job, progress ScanPr
 	// 3. 执行分析
 	log.Printf("[Task %d] 正在运行 codeql 查询分析...", job.TaskID)
 	progress("开始执行 CodeQL 查询")
+	stopAnalyzeHeartbeat := startHeartbeat(ctx, 20*time.Second, progress, "CodeQL 查询分析执行中")
 	sarifFile, err := w.codeql.Analyze(ctx, taskID, dbDir, job.Language, job.QuerySuite, job.RuleProfile, job.Rules)
+	stopAnalyzeHeartbeat()
 	if err != nil {
 		progress("CodeQL 查询执行失败: " + err.Error())
 		return nil, "", err
@@ -158,4 +163,30 @@ func readCodeFromFile(srcDir, filePath string, startLine, endLine int) string {
 		snippetLines = append(snippetLines, lines[i])
 	}
 	return strings.Join(snippetLines, "\n")
+}
+
+// startHeartbeat 启动后台进度心跳协程，在耗时的阻塞操作（建库、深度查询）期间定期上报进展，防止任务被判定离线
+func startHeartbeat(ctx context.Context, interval time.Duration, progress ScanProgressLogger, prompt string) func() {
+	ticker := time.NewTicker(interval)
+	stop := make(chan struct{})
+	start := time.Now()
+
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				elapsed := int(time.Since(start).Seconds())
+				progress(fmt.Sprintf("%s (执行中，已耗时 %ds)", prompt, elapsed))
+			}
+		}
+	}()
+
+	return func() {
+		close(stop)
+	}
 }

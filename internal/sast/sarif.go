@@ -176,18 +176,14 @@ func ParseSARIFData(data []byte) ([]Vulnerability, error) {
 			vulnerability.FilePath = normalizePath(vulnerability.FilePath)
 			vulnerability.DataFlow = dataFlow(result.CodeFlows, artifacts)
 
-			if fingerprint := result.PartialFingerprints["primaryLocationLineHash"]; fingerprint != "" {
-				vulnerability.Fingerprint = fingerprint
-			} else {
-				base := fmt.Sprintf("%s|%s|%d|%d",
-					vulnerability.RuleID,
-					vulnerability.FilePath,
-					vulnerability.StartLine,
-					vulnerability.EndLine,
-				)
-				hash := sha1.Sum([]byte(base))
-				vulnerability.Fingerprint = fmt.Sprintf("%x", hash)
-			}
+			base := fmt.Sprintf("%s:%s:%d:%d",
+				vulnerability.RuleID,
+				vulnerability.FilePath,
+				vulnerability.StartLine,
+				vulnerability.EndLine,
+			)
+			hash := sha1.Sum([]byte(base))
+			vulnerability.Fingerprint = fmt.Sprintf("%x", hash)
 			vulnerabilities = append(vulnerabilities, vulnerability)
 		}
 	}
@@ -195,17 +191,15 @@ func ParseSARIFData(data []byte) ([]Vulnerability, error) {
 }
 
 func deduplicate(vulnerabilities []Vulnerability) []Vulnerability {
-	type key struct {
-		ruleID    string
-		filePath  string
-		startLine int
-	}
-	indexes := make(map[key]int, len(vulnerabilities))
+	indexes := make(map[string]int, len(vulnerabilities))
 	result := make([]Vulnerability, 0, len(vulnerabilities))
 	for _, vulnerability := range vulnerabilities {
-		k := key{vulnerability.RuleID, vulnerability.FilePath, vulnerability.StartLine}
+		k := vulnerability.Fingerprint
 		if index, exists := indexes[k]; exists {
 			result[index].DataFlow = append(result[index].DataFlow, vulnerability.DataFlow...)
+			if result[index].CodeSnippet == "" && vulnerability.CodeSnippet != "" {
+				result[index].CodeSnippet = vulnerability.CodeSnippet
+			}
 			continue
 		}
 		indexes[k] = len(result)

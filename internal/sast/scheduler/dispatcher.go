@@ -74,23 +74,39 @@ func (d *TaskDispatcher) Dispatch(ctx context.Context, payload messaging.SASTTas
 		CommitSHA:       job.CommitSHA,
 		WorkerID:        workerID,
 	}); err != nil {
+		_ = d.client.Fail(ctx, job.TaskID, sast.Callback{
+			Error:      fmt.Sprintf("上报扫描结果失败: %v", err),
+			DurationMs: duration,
+			CommitSHA:  job.CommitSHA,
+			WorkerID:   workerID,
+		})
 		return fmt.Errorf("complete scan %d: %w", job.TaskID, err)
 	}
 	return nil
 }
 
 type WorkerClient struct {
-	baseURL string
-	token   string
-	client  *http.Client
+	baseURL  string
+	token    string
+	workerID string
+	client   *http.Client
 }
 
-func NewWorkerClient(cfg *config.WorkerConfig) *WorkerClient {
-	return &WorkerClient{
-		baseURL: strings.TrimRight(cfg.CallbackURL, "/"),
-		token:   cfg.Token,
-		client:  &http.Client{Timeout: 2 * time.Minute},
+func NewWorkerClient(cfg *config.WorkerConfig, workerID ...string) *WorkerClient {
+	wid := ""
+	if len(workerID) > 0 {
+		wid = workerID[0]
 	}
+	return &WorkerClient{
+		baseURL:  strings.TrimRight(cfg.CallbackURL, "/"),
+		token:    cfg.Token,
+		workerID: wid,
+		client:   &http.Client{Timeout: 2 * time.Minute},
+	}
+}
+
+func (c *WorkerClient) SetWorkerID(workerID string) {
+	c.workerID = workerID
 }
 
 func (c *WorkerClient) GetJob(ctx context.Context, taskID uint) (*sast.Job, error) {
@@ -133,6 +149,9 @@ func (c *WorkerClient) do(ctx context.Context, method, endpoint string, requestB
 		return err
 	}
 	req.Header.Set("X-Worker-Token", c.token)
+	if c.workerID != "" {
+		req.Header.Set("X-Worker-ID", c.workerID)
+	}
 	if requestBody != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

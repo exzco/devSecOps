@@ -22,6 +22,8 @@ scanner:
   max_concurrent: 2
   timeout_minutes: 60
   default_profile: baseline
+  ram_mb: 4096
+  threads: 4
   
 dast:
   poc_dir: "./data/pocs"

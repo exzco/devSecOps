@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,27 +94,49 @@ type CodeQLRunner struct {
 	workDir        string
 	profiles       map[string]config.ScannerRuleProfile
 	defaultProfile string
+	ramMB          int
+	threads        int
 }
 
 func NewCodeQLRunner(cfg *config.ScannerConfig) *CodeQLRunner {
+	ram := cfg.RamMB
+	if ram <= 0 {
+		ram = 4096
+	}
+	threads := cfg.Threads
+	if threads <= 0 {
+		threads = 4
+	}
 	return &CodeQLRunner{
 		codeqlPath:     cfg.CodeQLPath,
 		queriesPath:    cfg.CodeQLQueries,
 		workDir:        cfg.WorkDir,
 		profiles:       cfg.RuleProfiles,
 		defaultProfile: cfg.DefaultProfile,
+		ramMB:          ram,
+		threads:        threads,
 	}
 }
 
 func (c *CodeQLRunner) CreateDatabase(ctx context.Context, taskID, sourceDir, language string, buildCommand string) (string, error) {
 	dbDir := filepath.Join(c.workDir, taskID, "db")
 
+	ram := c.ramMB
+	if ram <= 0 {
+		ram = 4096
+	}
+	threads := c.threads
+	if threads <= 0 {
+		threads = 4
+	}
+
 	args := []string{
 		"database", "create",
 		dbDir,
 		"--language=" + language,
 		"--source-root=" + sourceDir,
-		"--threads=0",
+		fmt.Sprintf("--threads=%d", threads),
+		fmt.Sprintf("--ram=%d", ram),
 		"--overwrite",
 	}
 
@@ -151,6 +174,15 @@ func (c *CodeQLRunner) Analyze(ctx context.Context, taskID, dbDir, language, que
 		targets = []string{qlsPath}
 	}
 
+	ram := c.ramMB
+	if ram <= 0 {
+		ram = 4096
+	}
+	threads := c.threads
+	if threads <= 0 {
+		threads = 4
+	}
+
 	args := []string{
 		"database", "analyze",
 		dbDir,
@@ -159,7 +191,8 @@ func (c *CodeQLRunner) Analyze(ctx context.Context, taskID, dbDir, language, que
 	args = append(args,
 		"--format=sarif-latest",
 		"--output="+outputFile,
-		"--threads=0",
+		fmt.Sprintf("--threads=%d", threads),
+		fmt.Sprintf("--ram=%d", ram),
 		"--search-path="+c.queriesPath,
 		"--sarif-add-snippets",
 	)
@@ -175,25 +208,68 @@ func (c *CodeQLRunner) Analyze(ctx context.Context, taskID, dbDir, language, que
 	return outputFile, nil
 }
 
+func findQueriesDir(targetPath string) string {
+	dir := targetPath
+	if fi, err := os.Stat(targetPath); err != nil || !fi.IsDir() {
+		dir = filepath.Dir(targetPath)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "qlpack.yml")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir || parent == "." || parent == "/" {
+			break
+		}
+		dir = parent
+	}
+	parent := filepath.Dir(targetPath)
+	if strings.EqualFold(filepath.Base(parent), "codeql-suites") {
+		return filepath.Dir(parent)
+	}
+	return parent
+}
+
 func (c *CodeQLRunner) generateDynamicQLS(targets []string, rules string) string {
 	var sb strings.Builder
+	seenSources := make(map[string]struct{})
+
 	for _, target := range targets {
 		absTarget := c.resolveTargetPath(target)
 		slashPath := filepath.ToSlash(absTarget)
+		var sourceLine string
 		if strings.HasSuffix(slashPath, ".qls") {
-			sb.WriteString(fmt.Sprintf("- import: \"%s\"\n", slashPath))
+			queriesDir := filepath.ToSlash(findQueriesDir(absTarget))
+			sourceLine = fmt.Sprintf("- queries: \"%s\"\n", queriesDir)
 		} else if strings.HasSuffix(slashPath, ".ql") {
-			sb.WriteString(fmt.Sprintf("- query: \"%s\"\n", slashPath))
+			sourceLine = fmt.Sprintf("- query: \"%s\"\n", slashPath)
 		} else {
-			sb.WriteString(fmt.Sprintf("- queries: \"%s\"\n", slashPath))
+			queriesDir := filepath.ToSlash(findQueriesDir(absTarget))
+			if _, err := os.Stat(filepath.Join(queriesDir, "qlpack.yml")); err == nil {
+				sourceLine = fmt.Sprintf("- queries: \"%s\"\n", queriesDir)
+			} else if strings.Contains(target, "/") {
+				sourceLine = fmt.Sprintf("- queries: '.'\n  from: \"%s\"\n", target)
+			} else {
+				sourceLine = fmt.Sprintf("- queries: \"%s\"\n", slashPath)
+			}
+		}
+		if _, exists := seenSources[sourceLine]; !exists {
+			seenSources[sourceLine] = struct{}{}
+			sb.WriteString(sourceLine)
 		}
 	}
 
-	sb.WriteString("- include:\n")
-	sb.WriteString("    tags:\n")
+	var tagRules []string
+	var idRules []string
+
 	for _, rule := range strings.Split(rules, ",") {
 		rule = strings.TrimSpace(rule)
 		if rule == "" {
+			continue
+		}
+
+		if strings.Contains(rule, "/") {
+			idRules = append(idRules, rule)
 			continue
 		}
 
@@ -203,17 +279,61 @@ func (c *CodeQLRunner) generateDynamicQLS(targets []string, rules string) string
 			normalized = "cwe-" + strings.TrimPrefix(normalized, "cwe")
 		}
 
-		sb.WriteString(fmt.Sprintf("      - \"external/cwe/%s\"\n", normalized))
+		tagRules = append(tagRules, fmt.Sprintf("external/cwe/%s", normalized))
 
 		parts := strings.Split(normalized, "cwe-")
 		if len(parts) == 2 {
 			digits := parts[1]
 			trimmedDigits := strings.TrimLeft(digits, "0")
-			if trimmedDigits != digits && trimmedDigits != "" {
-				sb.WriteString(fmt.Sprintf("      - \"external/cwe/cwe-%s\"\n", trimmedDigits))
+			if trimmedDigits != "" {
+				tagRules = append(tagRules, fmt.Sprintf("external/cwe/cwe-%s", trimmedDigits))
+				if num, err := strconv.Atoi(trimmedDigits); err == nil {
+					tagRules = append(tagRules, fmt.Sprintf("external/cwe/cwe-%03d", num))
+				}
 			}
 		}
 	}
+
+	seenTags := make(map[string]struct{})
+	var uniqueTags []string
+	for _, tag := range tagRules {
+		if _, ok := seenTags[tag]; !ok {
+			seenTags[tag] = struct{}{}
+			uniqueTags = append(uniqueTags, tag)
+		}
+	}
+
+	if len(uniqueTags) > 0 {
+		sb.WriteString("- include:\n")
+		sb.WriteString("    tags contain:\n")
+		for _, tag := range uniqueTags {
+			sb.WriteString(fmt.Sprintf("      - \"%s\"\n", tag))
+		}
+	}
+
+	seenIDs := make(map[string]struct{})
+	var uniqueIDs []string
+	for _, id := range idRules {
+		if _, ok := seenIDs[id]; !ok {
+			seenIDs[id] = struct{}{}
+			uniqueIDs = append(uniqueIDs, id)
+		}
+	}
+
+	if len(uniqueIDs) > 0 {
+		sb.WriteString("- include:\n")
+		sb.WriteString("    id:\n")
+		for _, id := range uniqueIDs {
+			sb.WriteString(fmt.Sprintf("      - \"%s\"\n", id))
+		}
+	}
+
+	sb.WriteString("- exclude:\n")
+	sb.WriteString("    deprecated: //\n")
+	sb.WriteString("- exclude:\n")
+	sb.WriteString("    query path:\n")
+	sb.WriteString("      - /^experimental\\/.*/\n")
+
 	return sb.String()
 }
 
@@ -277,22 +397,48 @@ func (c *CodeQLRunner) resolveTargetPath(target string) string {
 
 	if strings.HasSuffix(target, ".ql") || strings.HasSuffix(target, ".qls") ||
 		strings.Contains(target, "\\") || strings.Contains(target, "/") {
-		return filepath.Join(c.queriesPath, target)
+		candidate := filepath.Join(c.queriesPath, target)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	// 尝试在 queriesPath 下搜索该套件名 (例如 java-security-extended 或 java-security-extended.qls)
+	suiteFile := target
+	if !strings.HasSuffix(suiteFile, ".qls") && !strings.HasSuffix(suiteFile, ".ql") {
+		suiteFile += ".qls"
+	}
+	if matches, err := filepath.Glob(filepath.Join(c.queriesPath, "codeql", "*", "*", "codeql-suites", suiteFile)); err == nil && len(matches) > 0 {
+		return matches[len(matches)-1]
+	}
+	if matches, err := filepath.Glob(filepath.Join(c.queriesPath, "*", "ql", "src", "codeql-suites", suiteFile)); err == nil && len(matches) > 0 {
+		return matches[len(matches)-1]
 	}
 
 	return target
 }
 
 func (c *CodeQLRunner) getDefaultQuerySuite(language string) string {
-	suiteMap := map[string]string{
-		"go":         filepath.FromSlash("go/ql/src/codeql-suites/go-security-extended.qls"),
-		"java":       filepath.FromSlash("java/ql/src/codeql-suites/java-security-extended.qls"),
-		"javascript": filepath.FromSlash("javascript/ql/src/codeql-suites/javascript-security-extended.qls"),
-		"python":     filepath.FromSlash("python/ql/src/codeql-suites/python-security-extended.qls"),
+	// 新版 CodeQL (≥2.13) qlpack 目录结构:
+	//   qlpacks/codeql/<lang>-queries/<version>/codeql-suites/<lang>-security-extended.qls
+	// 旧版 CodeQL (≤2.12) qlpack 目录结构:
+	//   qlpacks/<lang>/ql/src/codeql-suites/<lang>-security-extended.qls
+	// 此处动态探测，优先使用新版路径，回退到旧版路径，最后回退到裸套件名。
+	suiteName := language + "-security-extended.qls"
+
+	// 新版路径: qlpacks/codeql/<lang>-queries/*/codeql-suites/<suite>
+	newStyleGlob := filepath.Join(c.queriesPath, "codeql", language+"-queries", "*", "codeql-suites", suiteName)
+	if matches, err := filepath.Glob(newStyleGlob); err == nil && len(matches) > 0 {
+		return matches[len(matches)-1] // 取版本号最大（字典序最后）的
 	}
-	if suite, ok := suiteMap[language]; ok {
-		return suite
+
+	// 旧版路径: qlpacks/<lang>/ql/src/codeql-suites/<suite>
+	oldStylePath := filepath.Join(c.queriesPath, language, "ql", "src", "codeql-suites", suiteName)
+	if _, err := os.Stat(oldStylePath); err == nil {
+		return oldStylePath
 	}
+
+	// 回退到裸套件名，依赖 CodeQL --search-path 自行解析
 	return language + "-security-extended"
 }
 

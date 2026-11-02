@@ -124,6 +124,23 @@ body {
   color: #09090b !important;
   border-radius: 6px !important;
 }
+/* Prevent double borders / background overlap on inner input inside affix wrappers */
+.ant-input-affix-wrapper > input.ant-input,
+.ant-input-affix-wrapper input.ant-input {
+  background-color: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+.ant-input-affix-wrapper > input.ant-input:focus,
+.ant-input-affix-wrapper input.ant-input:focus {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
 .ant-input:focus, .ant-input-affix-wrapper-focused, .ant-textarea:focus {
   border-color: #a1a1aa !important; /* Zinc 400 */
   box-shadow: 0 0 0 1px #a1a1aa !important;

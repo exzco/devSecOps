@@ -57,68 +57,109 @@ BENCHMARK_CATEGORIES: Dict[str, Dict[str, Any]] = {
     "cmdi": {
         "name": "Command Injection",
         "cwe": 78,
-        "cwes": ["cwe-078", "cwe-78"],
-        "rules": ["java/command-line-injection", "cwe-078", "cwe-78"],
+        "cwes": ["cwe-078", "cwe-78", "cwe-088", "cwe-88"],
+        "rules": [
+            "java/command-line-injection", "java/concatenated-command-line",
+            "java/exec-tainted-environment", "java/relative-path-command",
+            "command-line-injection", "concatenated-command-line",
+            "exec-tainted-environment", "relative-path-command",
+            "cwe-078", "cwe-78",
+        ],
     },
     "crypto": {
         "name": "Weak Cryptography",
         "cwe": 327,
-        "cwes": ["cwe-327"],
-        "rules": ["java/weak-cryptographic-algorithm", "cwe-327"],
+        "cwes": ["cwe-327", "cwe-326"],
+        "rules": [
+            "java/weak-cryptographic-algorithm", "java/potentially-weak-cryptographic-algorithm",
+            "java/insufficient-key-size", "weak-cryptographic-algorithm",
+            "potentially-weak-cryptographic-algorithm", "insufficient-key-size",
+            "cwe-327",
+        ],
     },
     "hash": {
         "name": "Weak Hash Algorithm",
         "cwe": 328,
         "cwes": ["cwe-328"],
-        "rules": ["java/weak-cryptographic-hash", "cwe-328"],
+        "rules": [
+            "java/weak-cryptographic-hash", "java/weak-hash",
+            "java/potentially-weak-cryptographic-algorithm", "java/weak-cryptographic-algorithm",
+            "weak-cryptographic-hash", "weak-hash", "cwe-328",
+        ],
     },
     "ldapi": {
         "name": "LDAP Injection",
         "cwe": 90,
         "cwes": ["cwe-090", "cwe-90"],
-        "rules": ["java/ldap-injection", "cwe-090", "cwe-90"],
+        "rules": [
+            "java/ldap-injection", "java/insecure-ldap-auth",
+            "ldap-injection", "insecure-ldap-auth", "cwe-090", "cwe-90",
+        ],
     },
     "pathtraver": {
         "name": "Path Traversal",
         "cwe": 22,
-        "cwes": ["cwe-022", "cwe-22"],
-        "rules": ["java/path-injection", "cwe-022", "cwe-22"],
+        "cwes": ["cwe-022", "cwe-22", "cwe-023", "cwe-23", "cwe-036", "cwe-073"],
+        "rules": [
+            "java/path-injection", "java/zipslip",
+            "java/partial-path-traversal", "java/partial-path-traversal-from-remote",
+            "path-injection", "zipslip", "partial-path-traversal", "cwe-022", "cwe-22",
+        ],
     },
     "securecookie": {
         "name": "Insecure Cookie",
         "cwe": 614,
-        "cwes": ["cwe-614"],
-        "rules": ["java/insecure-cookie", "cwe-614"],
+        "cwes": ["cwe-614", "cwe-1004", "cwe-315"],
+        "rules": [
+            "java/insecure-cookie", "java/cleartext-storage-in-cookie",
+            "java/sensitive-cookie-not-httponly", "insecure-cookie",
+            "cleartext-storage-in-cookie", "sensitive-cookie-not-httponly", "cwe-614",
+        ],
     },
     "sqli": {
         "name": "SQL Injection",
         "cwe": 89,
-        "cwes": ["cwe-089", "cwe-89"],
-        "rules": ["java/sql-injection", "cwe-089", "cwe-89"],
+        "cwes": ["cwe-089", "cwe-89", "cwe-564"],
+        "rules": [
+            "java/sql-injection", "java/concatenated-sql-query",
+            "sql-injection", "concatenated-sql-query", "cwe-089", "cwe-89",
+        ],
     },
     "trustbound": {
         "name": "Trust Boundary",
         "cwe": 501,
         "cwes": ["cwe-501"],
-        "rules": ["java/trust-boundary-violation", "cwe-501"],
+        "rules": [
+            "java/trust-boundary-violation", "trust-boundary-violation", "cwe-501",
+        ],
     },
     "weakrand": {
         "name": "Weak Randomness",
         "cwe": 330,
-        "cwes": ["cwe-330"],
-        "rules": ["java/insecure-randomness", "cwe-330"],
+        "cwes": ["cwe-330", "cwe-335", "cwe-338"],
+        "rules": [
+            "java/insecure-randomness", "java/predictable-seed", "java/random-used-once",
+            "insecure-randomness", "predictable-seed", "random-used-once", "cwe-330",
+        ],
     },
     "xpathi": {
         "name": "XPath Injection",
         "cwe": 643,
         "cwes": ["cwe-643"],
-        "rules": ["java/xpath-injection", "cwe-643"],
+        "rules": [
+            "java/xml/xpath-injection", "java/xpath-injection",
+            "xpath-injection", "cwe-643",
+        ],
     },
     "xss": {
         "name": "Cross-Site Scripting",
         "cwe": 79,
         "cwes": ["cwe-079", "cwe-79"],
-        "rules": ["java/xss", "cwe-079", "cwe-79"],
+        "rules": [
+            "java/xss", "java/android/webview-addjavascriptinterface",
+            "java/android/websettings-javascript-enabled", "cross-site scripting",
+            "cwe-079", "cwe-79",
+        ],
     },
 }
 
@@ -382,22 +423,25 @@ class BenchmarkEvaluator:
         print_step(f"正在获取 TaskID={task_id} 的全部扫描漏洞结果...")
         findings = []
         page = 1
-        per_page = 200
+        per_page = 500
 
         while True:
             endpoint = f"/api/v1/scan/vulnerabilities?task_id={task_id}&page={page}&per_page={per_page}"
             status, res = self.client.request("GET", endpoint)
             if status != 200 or not isinstance(res, dict) or "data" not in res:
+                print_error(f"获取漏洞分页数据失败 (Page {page}): HTTP {status}, 响应: {res}")
                 break
 
             data_envelope = res["data"]
-            records = data_envelope.get("data", [])
+            records = data_envelope.get("data") or data_envelope.get("items") or []
             if not records:
                 break
 
             findings.extend(records)
-            total = data_envelope.get("total", 0)
-            if len(findings) >= total or len(records) < per_page:
+            total = int(data_envelope.get("total", 0))
+            total_pages = int(data_envelope.get("total_pages") or math.ceil(total / per_page) or 1)
+
+            if page >= total_pages or len(findings) >= total:
                 break
             page += 1
 
@@ -420,12 +464,16 @@ class BenchmarkEvaluator:
 
             rule_id = (f.get("rule_id") or "").lower()
             rule_name = (f.get("rule_name") or "").lower()
+            message = (f.get("message") or "").lower()
 
-            hit_cat = self.classify_finding(rule_id, rule_name)
-            if hit_cat:
+            hit_cats = self.classify_finding(rule_id, rule_name, message)
+            if hit_cats:
                 if test_name not in hits_by_test:
                     hits_by_test[test_name] = set()
-                hits_by_test[test_name].add(hit_cat)
+                if isinstance(hit_cats, (set, list)):
+                    hits_by_test[test_name].update(hit_cats)
+                else:
+                    hits_by_test[test_name].add(hit_cats)
 
         # 2. 逐分类计算指标与全局汇总
         category_metrics: Dict[str, MetricSummary] = {
@@ -489,19 +537,36 @@ class BenchmarkEvaluator:
         m.youden_j = m.tpr - m.fpr
         m.owasp_score = round(m.youden_j * 100.0, 2)
 
-    def classify_finding(self, rule_id: str, rule_name: str) -> Optional[str]:
+    def classify_finding(self, rule_id: str, rule_name: str, message: str = "") -> List[str]:
         """将 CodeQL 规则 ID 或名称映射到 Benchmark 11 类分类"""
-        combined = f"{rule_id} {rule_name}"
+        combined = f"{rule_id} {rule_name} {message}".lower()
+        matched = []
         for cat, meta in BENCHMARK_CATEGORIES.items():
-            # 1. 匹配官方关键字
+            hit = False
             for rk in meta["rules"]:
                 if rk in combined:
-                    return cat
-            # 2. 匹配 CWE 编号
-            for cwe_tag in meta["cwes"]:
-                if cwe_tag in combined:
-                    return cat
-        return None
+                    matched.append(cat)
+                    hit = True
+                    break
+            if not hit:
+                for cwe_tag in meta["cwes"]:
+                    if cwe_tag in combined:
+                        matched.append(cat)
+                        break
+
+        # 针对 CodeQL 中将弱哈希与弱加密算法合并规则的场景，依据 message 进行精准拆分消歧
+        if "crypto" in matched and "hash" in matched and (
+            "weak-cryptographic-algorithm" in rule_id or "potentially-weak-cryptographic-algorithm" in rule_id
+        ):
+            msg_lower = message.lower()
+            is_hash = any(h in msg_lower for h in ["md5", "sha1", "sha-1", "sha5", "hash", "digest"])
+            is_crypto = any(c in msg_lower for c in ["des", "aes", "blowfish", "cipher", "ecb", "cbc", "encrypt", "key length"])
+            if is_hash and not is_crypto:
+                matched = [c for c in matched if c != "crypto"]
+            elif is_crypto and not is_hash:
+                matched = [c for c in matched if c != "hash"]
+
+        return matched
 
 
 # ==================== 终端看板打印器 ====================

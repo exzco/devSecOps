@@ -1,21 +1,22 @@
 package sast
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"devsecops/internal/model"
+	"devsecops/internal/worker"
 )
 
-// ==========================================
-// 1. RepoService 仓库元数据管理与持久化分发
-// ==========================================
 
 type RepoService struct {
 	db *gorm.DB
@@ -130,16 +131,96 @@ func (s *RepoService) DeleteBatch(ids []uint) error {
 	})
 }
 
-// ==========================================
 // 2. ScanService SAST 扫描任务调度分发与结果持久化
-// ==========================================
 
 type ScanService struct {
-	db *gorm.DB
+	db  *gorm.DB
+	rdb *redis.Client
 }
 
-func NewScanService(db *gorm.DB) *ScanService {
-	return &ScanService{db: db}
+func NewScanService(db *gorm.DB, rdb ...*redis.Client) *ScanService {
+	svc := &ScanService{db: db}
+	if len(rdb) > 0 {
+		svc.rdb = rdb[0]
+	}
+	return svc
+}
+
+// ReconcileOrphanTasks 探测并自愈离线 Worker 的遗留孤儿任务及超时卡死任务
+func (s *ScanService) ReconcileOrphanTasks(ctx context.Context, timeout time.Duration) (int, error) {
+	if timeout <= 0 {
+		timeout = 60 * time.Minute
+	}
+
+	var activeTasks []model.ScanTask
+	if err := s.db.Where("status IN (?)", []string{model.TaskStatusPending, model.TaskStatusRunning}).Find(&activeTasks).Error; err != nil {
+		return 0, fmt.Errorf("query active scan tasks: %w", err)
+	}
+
+	reconciled := 0
+	now := time.Now()
+
+	for _, task := range activeTasks {
+		isOrphan := false
+		reason := ""
+
+		switch task.Status {
+		case model.TaskStatusRunning:
+			// 1. 如果绑定了 worker_id，检查该 worker 是否在 Redis 中持有有效心跳
+			if task.WorkerID != "" && s.rdb != nil {
+				key := fmt.Sprintf("%s%s:%s", worker.KeyWorkerPrefix, worker.TypeSAST, task.WorkerID)
+				val, err := s.rdb.Get(ctx, key).Result()
+				if (err == redis.Nil || val == "") && time.Since(task.UpdatedAt) > 5*time.Minute {
+					isOrphan = true
+					reason = fmt.Sprintf("执行节点 %s 已离线且超过 5 分钟未上报进度", task.WorkerID)
+				}
+			}
+
+			// 2. 如果未绑定 worker_id，但任务已处于 running 且超过 10 分钟未更新进度
+			if !isOrphan && task.WorkerID == "" && time.Since(task.UpdatedAt) > 10*time.Minute {
+				isOrphan = true
+				reason = "任务已被分配执行，但未关联有效 Worker 节点且超过 10 分钟无心跳响应"
+			}
+
+			// 3. 任务整体运行时间超过设定阈值（默认 60 分钟）未更新
+			if !isOrphan && time.Since(task.UpdatedAt) > timeout {
+				isOrphan = true
+				reason = fmt.Sprintf("任务执行已超过 %v 未更新，触发超时自愈拦截", timeout)
+			}
+
+		case model.TaskStatusPending:
+			// 任务排队超过 24 小时未被任何 Worker 领取
+			if time.Since(task.CreatedAt) > 24*time.Hour {
+				isOrphan = true
+				reason = "任务在队列中等待超过 24 小时，无可用 Worker 节点领取执行"
+			}
+		}
+
+		if isOrphan {
+			duration := int64(0)
+			if task.StartedAt != nil {
+				duration = now.Sub(*task.StartedAt).Milliseconds()
+			}
+			finishedAt := now
+
+			err := s.db.Model(&model.ScanTask{}).Where("id = ?", task.ID).Updates(map[string]interface{}{
+				"status":      model.TaskStatusFailed,
+				"finished_at": finishedAt,
+				"duration_ms": duration,
+				"error_msg":   reason,
+			}).Error
+			if err != nil {
+				log.Printf("[OrphanReaper] 自愈任务 #%d 失败: %v", task.ID, err)
+				continue
+			}
+
+			_ = s.AppendTaskLog(task.ID, fmt.Sprintf("系统自愈干预: %s，状态已自动置为失败", reason))
+			reconciled++
+			log.Printf("[OrphanReaper] 成功自愈孤儿任务 #%d (原状态: %s, 原因: %s)", task.ID, task.Status, reason)
+		}
+	}
+
+	return reconciled, nil
 }
 
 func (s *ScanService) CreateTask(repoID uint, triggerType, branch, language, querySuite, ruleProfile, rules string) (*model.ScanTask, error) {
@@ -246,35 +327,51 @@ func (s *ScanService) AppendTaskLog(taskID uint, message string) error {
 }
 
 func (s *ScanService) SaveResults(repoID, taskID uint, repoURL string, results []Vulnerability) error {
+	if taskID == 0 {
+		return errors.New("invalid task id: 0")
+	}
+
+	seen := make(map[string]struct{}, len(results))
+	vulnerabilities := make([]model.Vulnerability, 0, len(results))
+	for _, result := range results {
+		if result.Fingerprint != "" {
+			if _, ok := seen[result.Fingerprint]; ok {
+				continue
+			}
+			seen[result.Fingerprint] = struct{}{}
+		}
+
+		dataFlowJSON, err := json.Marshal(result.DataFlow)
+		if err != nil {
+			return fmt.Errorf("marshal data flow: %w", err)
+		}
+		vulnerabilities = append(vulnerabilities, model.Vulnerability{
+			ScanTaskID:  taskID,
+			RepoID:      repoID,
+			RepoURL:     repoURL,
+			FilePath:    result.FilePath,
+			StartLine:   result.StartLine,
+			EndLine:     result.EndLine,
+			CodeSnippet: result.CodeSnippet,
+			Fingerprint: result.Fingerprint,
+			DataFlow:    datatypes.JSON(dataFlowJSON),
+			BaseVulnerability: model.BaseVulnerability{
+				RuleID:   result.RuleID,
+				RuleName: result.RuleName,
+				Severity: result.Severity,
+				Message:  result.Message,
+				Status:   model.VulnStatusNew,
+			},
+		})
+	}
+
 	return s.db.Transaction(func(tx *gorm.DB) error {
-		for _, result := range results {
-			dataFlowJSON, err := json.Marshal(result.DataFlow)
-			if err != nil {
-				return fmt.Errorf("marshal data flow: %w", err)
-			}
-			vulnerability := &model.Vulnerability{
-				ScanTaskID:  taskID,
-				RepoID:      repoID,
-				Fingerprint: result.Fingerprint,
-			}
-			if err := tx.Where("repo_id = ? AND fingerprint = ?", repoID, result.Fingerprint).
-				Assign(map[string]interface{}{
-					"scan_task_id": taskID,
-					"repo_url":     repoURL,
-					"file_path":    result.FilePath,
-					"start_line":   result.StartLine,
-					"end_line":     result.EndLine,
-					"message":      result.Message,
-					"severity":     result.Severity,
-					"rule_id":      result.RuleID,
-					"rule_name":    result.RuleName,
-					"code_snippet": result.CodeSnippet,
-					"fingerprint":  result.Fingerprint,
-					"data_flow":    datatypes.JSON(dataFlowJSON),
-					"status":       model.VulnStatusNew,
-				}).
-				FirstOrCreate(vulnerability).Error; err != nil {
-				return fmt.Errorf("save vulnerability %s: %w", result.Fingerprint, err)
+		if err := tx.Unscoped().Where("scan_task_id = ?", taskID).Delete(&model.Vulnerability{}).Error; err != nil {
+			return fmt.Errorf("clear existing vulnerabilities for task %d: %w", taskID, err)
+		}
+		if len(vulnerabilities) > 0 {
+			if err := tx.CreateInBatches(vulnerabilities, 500).Error; err != nil {
+				return fmt.Errorf("bulk insert vulnerabilities: %w", err)
 			}
 		}
 		return nil
@@ -300,6 +397,10 @@ func (s *ScanService) ListVulnerabilities(query *model.ListQuery) (*model.Pagina
 	if query.RuleID != "" {
 		db = db.Where("rule_id = ?", query.RuleID)
 	}
+	if query.Keyword != "" {
+		kw := "%" + query.Keyword + "%"
+		db = db.Where("rule_id ILIKE ? OR rule_name ILIKE ? OR file_path ILIKE ? OR message ILIKE ?", kw, kw, kw, kw)
+	}
 
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
@@ -315,13 +416,22 @@ func (s *ScanService) ListVulnerabilities(query *model.ListQuery) (*model.Pagina
 	return model.NewPaginatedResponse(vulns, total, page, perPage), nil
 }
 
-func (s *ScanService) DeleteTask(taskID uint) error {
+func (s *ScanService) DeleteTask(taskID uint, force ...bool) error {
 	task, err := s.GetTask(taskID)
 	if err != nil {
 		return err
 	}
+
+	isForce := len(force) > 0 && force[0]
+
 	if task.Status == model.TaskStatusPending || task.Status == model.TaskStatusRunning {
-		return errors.New("cannot delete a running or pending task")
+		// 允许条件：
+		// 1. 显式指定 force=true
+		// 2. 任务距离最后一次更新已超过 60 分钟（被遗弃或超时的死任务）
+		isStale := time.Since(task.UpdatedAt) > 60*time.Minute
+		if !isForce && !isStale {
+			return errors.New("cannot delete a running or pending task (use ?force=true or wait 60 minutes after last update)")
+		}
 	}
 
 	return s.db.Transaction(func(tx *gorm.DB) error {

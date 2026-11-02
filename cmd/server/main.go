@@ -59,16 +59,41 @@ func main() {
 		panic("failed to migrate domain models: " + err.Error())
 	}
 
-	sastRepoSvc := sast.NewRepoService(db)
-	sastScanSvc := sast.NewScanService(db)
-	scaSvc := sca.NewScaService(db, &cfg.Scanner)
-
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.Redis.Addr,
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
 	defer rdb.Close()
+
+	sastRepoSvc := sast.NewRepoService(db)
+	sastScanSvc := sast.NewScanService(db, rdb)
+	scaSvc := sca.NewScaService(db, &cfg.Scanner)
+
+	reconcileTimeout := time.Duration(cfg.Scanner.TimeoutMinutes) * time.Minute
+	if reconcileTimeout <= 0 {
+		reconcileTimeout = 60 * time.Minute
+	}
+	if count, err := sastScanSvc.ReconcileOrphanTasks(context.Background(), reconcileTimeout); err == nil && count > 0 {
+		log.Printf("[Server-Init] 自愈并修复了 %d 个离线/超时孤儿 SAST 任务", count)
+	}
+
+	reaperCtx, cancelReaper := context.WithCancel(context.Background())
+	defer cancelReaper()
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-reaperCtx.Done():
+				return
+			case <-ticker.C:
+				if count, err := sastScanSvc.ReconcileOrphanTasks(reaperCtx, reconcileTimeout); err == nil && count > 0 {
+					log.Printf("[OrphanReaper] 周期巡检完成，已自愈 %d 个异常任务", count)
+				}
+			}
+		}
+	}()
 
 	streamClient := messaging.NewStreamClient(rdb)
 	dastSvc := dast.NewDastService(rdb, cfg.Dast)
